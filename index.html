@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>데굴데굴 볼링 기록실</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Pretendard", "Noto Sans KR", Arial, sans-serif;
+      background: #f6f7f4;
+      color: #202420;
+    }
+    .wrap {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 26px 18px 60px;
+    }
+    .hero {
+      background: #ffffff;
+      border: 1px solid #e2e6df;
+      border-radius: 22px;
+      padding: 26px;
+      margin-bottom: 18px;
+      box-shadow: 0 8px 28px rgba(0,0,0,.05);
+    }
+    .hero h1 { margin: 0 0 8px; font-size: 30px; }
+    .hero p { margin: 0; color: #666d66; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin: 18px 0;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #e2e6df;
+      border-radius: 18px;
+      padding: 18px;
+    }
+    .card .label { color: #737a73; font-size: 13px; margin-bottom: 7px; }
+    .card .value { font-size: 25px; font-weight: 800; }
+    .section {
+      background: #fff;
+      border: 1px solid #e2e6df;
+      border-radius: 18px;
+      padding: 20px;
+      margin-top: 16px;
+    }
+    .section h2 { margin: 0 0 16px; font-size: 20px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    th, td {
+      padding: 12px 10px;
+      border-bottom: 1px solid #ecefea;
+      text-align: center;
+    }
+    th { color: #6d746d; font-weight: 700; }
+    td:first-child, th:first-child { text-align: left; }
+    .rank { font-weight: 800; }
+    .empty {
+      text-align: center;
+      color: #8a908a;
+      padding: 32px 0;
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+    .scores {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 10px;
+    }
+    input, select, button {
+      font: inherit;
+    }
+    input, select {
+      width: 100%;
+      padding: 11px 12px;
+      border: 1px solid #cfd5cd;
+      border-radius: 10px;
+      background: white;
+    }
+    .primary {
+      width: 100%;
+      margin-top: 12px;
+      padding: 12px;
+      border: 0;
+      border-radius: 10px;
+      background: #252a25;
+      color: #fff;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .secondary {
+      margin-top: 10px;
+      padding: 9px 12px;
+      border: 1px solid #cfd5cd;
+      border-radius: 9px;
+      background: white;
+      cursor: pointer;
+    }
+    .danger {
+      padding: 5px 8px;
+      border: 1px solid #d8bcbc;
+      background: white;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .status {
+      margin-top: 10px;
+      font-size: 13px;
+      color: #606760;
+    }
+    .note {
+      font-size: 12px;
+      color: #7b817b;
+      margin-top: 8px;
+      line-height: 1.55;
+    }
+    .field-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      color: #6d746d;
+      margin-bottom: 4px;
+    }
+    .nickname {
+      font-weight: 800;
+    }
+    .realname {
+      font-size: 11px;
+      font-weight: 500;
+      color: #9aa09a;
+      margin-left: 4px;
+    }
+    @media (max-width: 700px) {
+      .grid, .form-grid, .scores { grid-template-columns: 1fr; }
+      .hero h1 { font-size: 25px; }
+      th, td { padding: 10px 6px; font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <h1>🎳 데굴데굴 볼링 기록실</h1>
+    <p>정기 활동 점수를 차곡차곡 쌓아보세요. 에버리지와 최고점은 자동 계산됩니다.</p>
+  </div>
+
+  <div class="grid">
+    <div class="card"><div class="label">등록된 게임</div><div class="value" id="totalGames">-</div></div>
+    <div class="card"><div class="label">전체 최고점</div><div class="value" id="clubHigh">-</div></div>
+    <div class="card"><div class="label">현재 AVG 1위</div><div class="value" id="avgLeader">-</div></div>
+  </div>
+
+  <div class="section">
+    <h2>🏆 누적 에버리지 랭킹</h2>
+    <div id="rankingArea"><div class="empty">기록을 불러오는 중...</div></div>
+  </div>
+
+  <div class="section">
+    <h2>🗓 최근 경기 기록</h2>
+    <div id="recentArea"><div class="empty">기록을 불러오는 중...</div></div>
+  </div>
+
+  <div class="section" id="scoreSection">
+    <h2>✏️ 점수 등록</h2>
+
+    <div id="loginBox">
+      <div class="form-grid">
+        <input type="email" id="email" placeholder="이메일">
+        <input type="password" id="password" placeholder="비밀번호">
+      </div>
+      <button class="primary" onclick="login()">로그인</button>
+      <button class="secondary" onclick="showSignup()">회원가입</button>
+      <div class="note">로그인하면 점수를 등록할 수 있습니다.</div>
+    </div>
+
+    <div id="signupBox" style="display:none;">
+      <h3 style="margin:0 0 10px;font-size:16px;">회원가입</h3>
+      <div class="form-grid">
+        <div>
+          <label class="field-label">실명</label>
+          <input type="text" id="signupRealName" placeholder="실명">
+        </div>
+        <div>
+          <label class="field-label">별명</label>
+          <input type="text" id="signupNickname" placeholder="별명">
+        </div>
+      </div>
+      <div class="note" style="margin-top:10px;">기본 비밀번호 : sure1!</div>
+      <div class="form-grid" style="margin-top:10px;">
+        <div>
+          <label class="field-label">이메일</label>
+          <input type="email" id="signupEmail" placeholder="이메일">
+        </div>
+        <div>
+          <label class="field-label">비밀번호</label>
+          <input type="password" id="signupPassword" placeholder="비밀번호">
+        </div>
+      </div>
+      <div style="margin-top:10px;">
+        <label class="field-label">비밀번호 확인</label>
+        <input type="password" id="signupPasswordConfirm" placeholder="비밀번호 확인">
+      </div>
+      <div class="note" style="margin-top:10px;">가입 확인 질문: 데굴데굴의 마스코트 이름은?</div>
+      <input type="text" id="mascotAnswer" placeholder="정답 입력">
+      <button class="primary" onclick="signUp()">가입하기</button>
+      <button class="secondary" onclick="hideSignup()">로그인으로 돌아가기</button>
+      <div class="status" id="signupStatus"></div>
+    </div>
+
+    <div id="scoreBox" style="display:none;">
+      <div class="form-grid">
+        <select id="memberSelect"></select>
+        <input type="date" id="playedAt">
+      </div>
+      <div class="scores">
+        <input type="number" id="score1" min="0" max="300" placeholder="1게임">
+        <input type="number" id="score2" min="0" max="300" placeholder="2게임">
+        <input type="number" id="score3" min="0" max="300" placeholder="3게임">
+      </div>
+      <button class="primary" onclick="addScores()">점수 등록</button>
+      <button class="secondary" onclick="logout()">로그아웃</button>
+      <div class="note">1~3게임 중 실제 진행한 게임만 입력하면 됩니다. 0~300점만 등록됩니다.</div>
+    </div>
+
+    <div class="status" id="status"></div>
+  </div>
+</div>
+
+<script type="module">
+  import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+  // ====== 여기 2개만 본인의 Supabase 값으로 교체하세요 ======
+  const SUPABASE_URL = "https://ycbmzldopqamndpzazks.supabase.co";
+  const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_XzPhSkNeEoifW5cBMtethw_5N3Hx0-9";
+  // ==========================================================
+
+  const db = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+  window.db = db;
+
+  const $ = (id) => document.getElementById(id);
+
+  // 회원가입 확인 질문의 정답, 기본으로 채워둘 이메일/비밀번호(수정 가능)
+  const MASCOT_ANSWER = "슈데구리";
+  const DEFAULT_SIGNUP_EMAIL = "id@suresofttech.com";
+  const DEFAULT_SIGNUP_PASSWORD = "sure1!";
+
+  function setSignupStatus(msg) {
+    $("signupStatus").textContent = msg || "";
+  }
+
+  function fillSignupDefaults() {
+    $("signupRealName").value = "";
+    $("signupNickname").value = "";
+    $("signupEmail").value = DEFAULT_SIGNUP_EMAIL;
+    $("signupPassword").value = DEFAULT_SIGNUP_PASSWORD;
+    $("signupPasswordConfirm").value = DEFAULT_SIGNUP_PASSWORD;
+    $("mascotAnswer").value = "";
+    setSignupStatus("");
+  }
+
+  function memberDisplay(name, nickname) {
+    const primary = nickname || name || "알 수 없음";
+    const secondary = (nickname && name && nickname !== name) ? name : null;
+    return `<span class="nickname">${escapeHtml(primary)}</span>` +
+      (secondary ? `<span class="realname">${escapeHtml(secondary)}</span>` : "");
+  }
+
+  async function ensureMemberRecord() {
+    const {
+      data: { user }
+    } = await db.auth.getUser();
+    if (!user) return;
+
+    const { data: existing } = await db
+      .from("bowling_members")
+      .select("id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (existing) return;
+
+    const meta = user.user_metadata || {};
+    if (!meta.name || !meta.nickname) return;
+
+    const { error } = await db.from("bowling_members").insert({
+      user_id: user.id,
+      name: meta.name,
+      nickname: meta.nickname,
+      active: true
+    });
+    if (error) {
+      console.warn("회원 정보 생성 실패:", error.message);
+    }
+  }
+
+  window.showSignup = function () {
+    $("loginBox").style.display = "none";
+    $("signupBox").style.display = "block";
+    fillSignupDefaults();
+  };
+
+  window.hideSignup = function () {
+    $("signupBox").style.display = "none";
+    $("loginBox").style.display = "block";
+  };
+
+  window.signUp = async function () {
+    const realName = $("signupRealName").value.trim();
+    const nickname = $("signupNickname").value.trim();
+    const email = $("signupEmail").value.trim();
+    const password = $("signupPassword").value;
+    const passwordConfirm = $("signupPasswordConfirm").value;
+    const mascotAnswer = $("mascotAnswer").value.trim();
+
+    if (!realName || !nickname) return setSignupStatus("실명과 별명을 모두 입력하세요.");
+    if (!email || !password) return setSignupStatus("이메일과 비밀번호를 입력하세요.");
+    if (password.length < 6) return setSignupStatus("비밀번호는 6자 이상이어야 합니다.");
+    if (password !== passwordConfirm) return setSignupStatus("비밀번호가 서로 다릅니다. 다시 확인해주세요.");
+    if (mascotAnswer !== MASCOT_ANSWER) return setSignupStatus("데굴데굴의 마스코트를 모르는 당신은 데굴데굴의 회원일 수가 없습니다.");
+
+    setSignupStatus("가입 처리 중...");
+    const { data, error } = await db.auth.signUp({
+      email,
+      password,
+      options: { data: { name: realName, nickname } }
+    });
+    if (error) return setSignupStatus("회원가입 실패: " + error.message);
+
+    if (data.session) {
+      setSignupStatus("");
+      hideSignup();
+      await refreshAuthUi();
+      await loadScores();
+    } else {
+      setSignupStatus("회원가입 완료! 이메일 인증 후 로그인해주세요.");
+    }
+  };
+
+  async function isAdmin() {
+    const {
+      data: { user }
+    } = await db.auth.getUser();
+
+    if (!user) {
+      return false;
+    }
+
+    const { data, error } = await db
+      .from("bowling_admins")
+      .select("user_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    return !error && !!data;
+  }
+
+  function setStatus(msg) {
+    $("status").textContent = msg || "";
+  }
+
+  function todayLocal() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+  $("playedAt").value = todayLocal();
+
+  async function loadMembers() {
+    const { data, error } = await db
+      .from("bowling_members")
+      .select("id,name,nickname")
+      .eq("active", true)
+      .order("name");
+
+    if (error) {
+      setStatus("회원 목록 조회 실패: " + error.message);
+      return;
+    }
+
+    $("memberSelect").innerHTML = "";
+    for (const m of data) {
+      const option = document.createElement("option");
+      option.value = m.id;
+      option.textContent = m.nickname ? `${m.nickname} (${m.name})` : m.name;
+      $("memberSelect").appendChild(option);
+    }
+  }
+
+  async function loadScores() {
+    const { data, error } = await db
+      .from("bowling_scores")
+      .select("id,score,played_at,created_at,member_id,bowling_members(name,nickname)")
+      .order("played_at", { ascending: false })
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      $("rankingArea").innerHTML = `<div class="empty">데이터 조회 실패</div>`;
+      $("recentArea").innerHTML = `<div class="empty">데이터 조회 실패</div>`;
+      setStatus(error.message);
+      return;
+    }
+
+    renderDashboard(data || []);
+  }
+
+  function renderDashboard(rows) {
+    $("totalGames").textContent = rows.length.toLocaleString();
+
+    if (!rows.length) {
+      $("clubHigh").textContent = "-";
+      $("avgLeader").textContent = "-";
+      $("rankingArea").innerHTML = `<div class="empty">아직 등록된 점수가 없습니다.</div>`;
+      $("recentArea").innerHTML = `<div class="empty">첫 활동 점수를 등록해보세요 🎳</div>`;
+      return;
+    }
+
+    const high = Math.max(...rows.map(r => r.score));
+    $("clubHigh").textContent = high;
+
+    const statMap = new Map();
+    for (const r of rows) {
+      const key = r.member_id;
+      const name = r.bowling_members?.name || "알 수 없음";
+      const nickname = r.bowling_members?.nickname || "";
+      if (!statMap.has(key)) statMap.set(key, { name, nickname, scores: [] });
+      statMap.get(key).scores.push(r.score);
+    }
+
+    const stats = [...statMap.values()].map(s => {
+      const total = s.scores.reduce((a,b) => a+b, 0);
+      return {
+        name: s.name,
+        nickname: s.nickname,
+        games: s.scores.length,
+        avg: total / s.scores.length,
+        high: Math.max(...s.scores),
+      };
+    }).sort((a,b) => b.avg - a.avg);
+
+    $("avgLeader").innerHTML =
+      `${memberDisplay(stats[0].name, stats[0].nickname)} <span style="font-size:14px;font-weight:700;">${stats[0].avg.toFixed(1)}</span>`;
+
+    const rankTable = document.createElement("table");
+    rankTable.innerHTML = `
+      <thead><tr>
+        <th>순위 / 회원</th><th>게임수</th><th>최고점</th><th>에버리지</th>
+      </tr></thead>
+    `;
+    const tb = document.createElement("tbody");
+    stats.forEach((s, i) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td class="rank">${["🥇","🥈","🥉"][i] || (i+1)+"위"} ${memberDisplay(s.name, s.nickname)}</td>
+        <td>${s.games}</td>
+        <td>${s.high}</td>
+        <td><b>${s.avg.toFixed(1)}</b></td>
+      `;
+      tb.appendChild(tr);
+    });
+    rankTable.appendChild(tb);
+    $("rankingArea").innerHTML = "";
+    $("rankingArea").appendChild(rankTable);
+
+    const recent = rows.slice(0, 20);
+    const recentTable = document.createElement("table");
+    recentTable.innerHTML = `
+      <thead><tr>
+        <th>날짜 / 회원</th><th>점수</th><th class="adminCol" style="display:none;">관리</th>
+      </tr></thead>
+    `;
+    const rb = document.createElement("tbody");
+    recent.forEach(r => {
+      const tr = document.createElement("tr");
+      const name = r.bowling_members?.name || "알 수 없음";
+      const nickname = r.bowling_members?.nickname || "";
+      tr.innerHTML = `
+        <td>${escapeHtml(r.played_at)} · ${memberDisplay(name, nickname)}</td>
+        <td><b>${r.score}</b></td>
+        <td class="adminCol" style="display:none;">
+          <button class="danger" data-id="${r.id}">삭제</button>
+        </td>
+      `;
+      tr.querySelector(".danger").addEventListener("click", () => deleteScore(r.id));
+      rb.appendChild(tr);
+    });
+    recentTable.appendChild(rb);
+    $("recentArea").innerHTML = "";
+    $("recentArea").appendChild(recentTable);
+
+    refreshAdminColumns();
+  }
+
+  function escapeHtml(v) {
+    return String(v)
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
+  }
+
+  window.login = async function () {
+    const email = $("email").value.trim();
+    const password = $("password").value;
+    if (!email || !password) return setStatus("이메일과 비밀번호를 입력하세요.");
+
+    setStatus("로그인 중...");
+    const { error } = await db.auth.signInWithPassword({ email, password });
+    if (error) return setStatus("로그인 실패: " + error.message);
+
+    setStatus("로그인 완료");
+    await refreshAuthUi();
+  };
+
+  window.logout = async function () {
+    await db.auth.signOut();
+    setStatus("로그아웃했습니다.");
+    await refreshAuthUi();
+  };
+
+  async function refreshAuthUi() {
+    const { data } = await db.auth.getSession();
+    const loggedIn = !!data.session;
+    $("signupBox").style.display = "none";
+    $("loginBox").style.display = loggedIn ? "none" : "block";
+    $("scoreBox").style.display = loggedIn ? "block" : "none";
+    if (loggedIn) {
+      await ensureMemberRecord();
+      await loadMembers();
+    }
+    refreshAdminColumns();
+  }
+
+  function refreshAdminColumns() {
+    isAdmin().then((admin) => {
+      document.querySelectorAll(".adminCol").forEach(el => {
+        el.style.display = admin ? "table-cell" : "none";
+      });
+    });
+  }
+
+  window.addScores = async function () {
+    const memberId = $("memberSelect").value;
+    const playedAt = $("playedAt").value;
+    const raw = [$("score1").value, $("score2").value, $("score3").value]
+      .filter(v => v !== "");
+
+    if (!memberId || !playedAt) return setStatus("회원과 활동 날짜를 확인하세요.");
+    if (!raw.length) return setStatus("점수를 1개 이상 입력하세요.");
+
+    const scores = raw.map(Number);
+    if (scores.some(v => !Number.isInteger(v) || v < 0 || v > 300)) {
+      return setStatus("점수는 0~300 사이 정수만 입력할 수 있습니다.");
+    }
+
+    const payload = scores.map(score => ({
+      member_id: memberId,
+      score,
+      played_at: playedAt
+    }));
+
+    setStatus("저장 중...");
+    const { error } = await db.from("bowling_scores").insert(payload);
+    if (error) return setStatus("등록 실패: " + error.message);
+
+    ["score1","score2","score3"].forEach(id => $(id).value = "");
+    setStatus(`${scores.length}게임 기록을 등록했습니다.`);
+    await loadScores();
+  };
+
+  async function deleteScore(id) {
+    if (!confirm("이 점수 기록을 삭제할까요?")) return;
+    const { error } = await db.from("bowling_scores").delete().eq("id", id);
+    if (error) return setStatus("삭제 실패: " + error.message);
+    setStatus("기록을 삭제했습니다.");
+    await loadScores();
+  }
+
+  db.auth.onAuthStateChange(() => refreshAuthUi());
+
+  await loadMembers();
+  await refreshAuthUi();
+  await loadScores();
+</script>
+</body>
+</html>
