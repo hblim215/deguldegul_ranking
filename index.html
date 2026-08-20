@@ -6,6 +6,8 @@
   <title>데굴데굴 볼링 기록실</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js"></script>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -253,10 +255,11 @@
       display: flex;
       gap: 8px;
       margin-bottom: 16px;
+      flex-wrap: wrap;
     }
     .tab-btn {
       width: auto;
-      padding: 10px 18px;
+      padding: 10px 14px;
       border-radius: 10px;
       border: 1px solid #d9dcd9;
       background: #fff;
@@ -264,6 +267,8 @@
       font-weight: 700;
       cursor: pointer;
       margin-top: 0;
+      font-size: 13px;
+      white-space: nowrap;
     }
     .tab-btn.active {
       background: #2f7d3c;
@@ -273,8 +278,53 @@
     .venue-map {
       height: 320px;
       border-radius: 10px;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
       z-index: 0;
+    }
+    .map-toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 10px;
+      font-size: 12px;
+      color: #52584f;
+    }
+    .map-toggle-row label {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+    }
+    .map-toggle-row input[type="checkbox"] {
+      width: auto;
+      margin: 0;
+    }
+    .member-pin {
+      background: #e8703a;
+      color: #fff;
+      border: 2px solid #fff;
+      border-radius: 50%;
+      width: 26px;
+      height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 800;
+      box-shadow: 0 1px 4px rgba(0,0,0,.35);
+    }
+    .venue-card .vedit-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    button.ghost {
+      padding: 5px 8px;
+      border: 1px solid #cfd5cd;
+      background: white;
+      border-radius: 8px;
+      cursor: pointer;
+      color: #3a4038;
     }
     .venue-card {
       border: 1px solid #e5e8e5;
@@ -373,7 +423,12 @@
 
   <div class="tab-bar">
     <button class="tab-btn active" id="tabBtnRecords" onclick="showTab('records')">🎳 기록실</button>
+    <button class="tab-btn" id="tabBtnOcr" onclick="showTab('ocr')">📷 사진으로 등록</button>
+    <button class="tab-btn" id="tabBtnGrowth" onclick="showTab('growth')">📈 성장그래프</button>
+    <button class="tab-btn" id="tabBtnHandicap" onclick="showTab('handicap')">🎯 핸디캡</button>
     <button class="tab-btn" id="tabBtnVenue" onclick="showTab('venue')">📍 모임장소 추천</button>
+    <button class="tab-btn" id="tabBtnMeetupLog" onclick="showTab('meetuplog')">🗓 모임 기록</button>
+    <button class="tab-btn" id="tabBtnAnnounce" onclick="showTab('announce')">📢 모임 공지</button>
   </div>
 
   <div id="tabRecords">
@@ -501,11 +556,15 @@
       <div class="main-col">
         <div class="section">
           <h2>🎳 볼링장 후보</h2>
+          <div class="map-toggle-row">
+            <label><input type="checkbox" id="toggleVenueMarkers" checked onchange="renderVenueMap()"> 📍 볼링장</label>
+            <label><input type="checkbox" id="toggleMemberMarkers" checked onchange="renderVenueMap()"> 🙋 회원 위치</label>
+          </div>
           <div id="venueMap" class="venue-map"></div>
           <div id="venueArea"><div class="empty">불러오는 중...</div></div>
 
           <div id="venueWriteBox" style="display:none;margin-top:14px;">
-            <h3 style="margin:0 0 10px;font-size:16px;">볼링장 등록</h3>
+            <h3 style="margin:0 0 10px;font-size:16px;" id="venueWriteBoxTitle">볼링장 등록</h3>
             <div class="form-grid">
               <input type="text" id="venueName" placeholder="볼링장 이름">
               <input type="text" id="venueDong" list="dongDatalist" placeholder="동 이름 (예: 둔산동)">
@@ -516,7 +575,10 @@
               <input type="text" id="venuePrice" placeholder="가격 정보 (선택)">
             </div>
             <textarea id="venueReview" rows="2" placeholder="후기 (선택)" style="margin-top:10px;"></textarea>
-            <button class="primary" onclick="addVenue()">등록</button>
+            <div style="display:flex;gap:8px;">
+              <button class="primary" id="venueSubmitBtn" onclick="saveVenue()">등록</button>
+              <button type="button" id="venueCancelEditBtn" style="display:none;" onclick="cancelEditVenue()">취소</button>
+            </div>
           </div>
           <div id="venueLoginNotice" class="note" style="display:none;">로그인 후 볼링장을 등록할 수 있어요.</div>
         </div>
@@ -575,6 +637,117 @@
       </div>
     </div>
     <datalist id="dongDatalist"></datalist>
+  </div>
+
+  <div id="tabOcr" style="display:none;">
+    <div class="status" id="ocrStatus"></div>
+    <div class="section">
+      <h2>📷 점수표 사진으로 등록</h2>
+      <div class="note" style="margin-bottom:10px;">전광판/모니터를 찍은 점수표 사진을 올리면 숫자를 자동으로 읽어서 표로 정리해드려요. 인식 정확도가 완벽하지 않으니 저장 전에 회원과 점수를 꼭 확인/수정해주세요.</div>
+      <input type="file" id="ocrFileInput" accept="image/*" capture="environment" onchange="onOcrFileChange(event)">
+      <div id="ocrPreviewWrap" style="display:none;margin-top:10px;">
+        <img id="ocrPreview" style="max-width:100%;border-radius:10px;" alt="점수표 미리보기" />
+      </div>
+      <button class="primary" id="ocrRunBtn" onclick="runOcr()" style="margin-top:10px;" disabled>사진에서 인식하기</button>
+      <div id="ocrProgress" class="note" style="display:none;"></div>
+
+      <div id="ocrResultBox" style="display:none;margin-top:18px;">
+        <label class="field-label">활동 날짜</label>
+        <input type="date" id="ocrPlayedAt" style="max-width:220px;">
+        <div style="overflow-x:auto;margin-top:14px;">
+          <table>
+            <thead><tr><th>인식된 텍스트</th><th>회원</th><th>점수</th><th></th></tr></thead>
+            <tbody id="ocrRowsBody"></tbody>
+          </table>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+          <button class="secondary" onclick="addOcrRow()">+ 행 추가</button>
+          <button class="primary" onclick="saveOcrScores()" style="margin-top:0;">선택한 항목 저장</button>
+        </div>
+      </div>
+      <div id="ocrLoginNotice" class="note" style="display:none;">로그인 후 인식된 점수를 저장할 수 있어요.</div>
+    </div>
+  </div>
+
+  <div id="tabGrowth" style="display:none;">
+    <div class="section">
+      <h2>📈 개인 성장 그래프</h2>
+      <div class="form-grid" style="grid-template-columns:1fr;">
+        <select id="growthMemberSelect" onchange="renderGrowthChart()"></select>
+      </div>
+      <div class="grid" style="margin-top:14px;">
+        <div class="card"><div class="label">누적 게임 수</div><div class="value" id="growthGames">-</div></div>
+        <div class="card"><div class="label">개인 최고점</div><div class="value" id="growthHigh">-</div></div>
+        <div class="card"><div class="label">전체 에버리지</div><div class="value" id="growthAvg">-</div></div>
+      </div>
+      <div style="margin-top:16px;position:relative;height:280px;">
+        <canvas id="growthCanvas"></canvas>
+      </div>
+      <div id="growthEmpty" class="empty" style="display:none;">아직 등록된 점수가 없어요.</div>
+      <div class="note" style="margin-top:8px;">연한 선은 게임별 점수, 굵은 선은 최근 5게임 이동평균이에요.</div>
+    </div>
+  </div>
+
+  <div id="tabHandicap" style="display:none;">
+    <div class="section">
+      <h2>🎯 핸디캡 계산</h2>
+      <div class="note" style="margin-bottom:10px;">핸디캡 = (기준점수 − 에버리지) × 가중치 (0보다 작으면 0). 실력 차이를 보정해서 팀 경기나 내기에 활용해보세요.</div>
+      <div class="rank-controls">
+        <label>기준점수</label>
+        <input type="number" id="hcBaseScore" value="200" style="width:90px;" onchange="renderHandicapTable()">
+        <label>가중치</label>
+        <input type="number" id="hcWeight" value="0.8" step="0.05" min="0" max="1" style="width:80px;" onchange="renderHandicapTable()">
+        <button class="secondary" onclick="resetHandicapSettings()">기본값</button>
+      </div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>회원</th><th>게임수</th><th>에버리지</th><th>핸디캡</th><th>핸디캡 적용 예상점수</th></tr></thead>
+          <tbody id="handicapBody"><tr><td colspan="5" class="empty">불러오는 중...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="tabMeetupLog" style="display:none;">
+    <div class="status" id="meetupStatus"></div>
+    <div class="section">
+      <h2>🗓 모임 기록 남기기</h2>
+      <div id="meetupWriteBox">
+        <div class="form-grid">
+          <input type="date" id="meetupDate">
+          <select id="meetupVenueSelect"><option value="">간 볼링장 선택 (선택)</option></select>
+        </div>
+        <div class="note" style="margin:10px 0 4px;font-weight:700;">참여자</div>
+        <div id="meetupAttendeeArea"><div class="empty">회원 목록을 불러오는 중...</div></div>
+        <textarea id="meetupNote" rows="2" placeholder="메모 (선택)" style="margin-top:10px;"></textarea>
+        <button class="primary" onclick="saveMeetupLog()">모임 기록 저장</button>
+      </div>
+      <div id="meetupLoginNotice" class="note" style="display:none;">로그인 후 모임 기록을 남길 수 있어요.</div>
+    </div>
+    <div class="section">
+      <h2>📋 지난 모임 목록</h2>
+      <div id="meetupLogArea"><div class="empty">불러오는 중...</div></div>
+    </div>
+  </div>
+
+  <div id="tabAnnounce" style="display:none;">
+    <div class="status" id="announceStatus"></div>
+    <div class="section">
+      <h2>📢 모임 공지 만들기</h2>
+      <div class="form-grid">
+        <input type="date" id="announceDate">
+        <input type="text" id="announceTime" placeholder="집합 시간 (예: 저녁 7시)">
+      </div>
+      <div class="note" style="margin:12px 0 4px;font-weight:700;">🙋 참여자 선택</div>
+      <div id="announceAttendeeArea"><div class="empty">회원 목록을 불러오는 중...</div></div>
+      <div class="note" style="margin:16px 0 4px;font-weight:700;">📍 추천 장소 (참여자 위치 기준, 하나를 선택하세요)</div>
+      <div id="announceVenueArea"><div class="empty">참여자를 선택하면 추천 장소가 표시됩니다.</div></div>
+      <button class="primary" onclick="generateAnnouncement()" style="margin-top:16px;">공지 생성</button>
+      <div id="announceResultBox" style="display:none;margin-top:14px;">
+        <textarea id="announceResultText" rows="9" readonly style="font-family:inherit;"></textarea>
+        <button class="secondary" onclick="copyAnnouncement()">📋 복사하기</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -737,8 +910,10 @@
 
   function setStatus(msg) {
     $("status").textContent = msg || "";
-    const venueStatus = $("venueStatus");
-    if (venueStatus) venueStatus.textContent = msg || "";
+    ["venueStatus", "meetupStatus", "announceStatus", "ocrStatus"].forEach(id => {
+      const el = $(id);
+      if (el) el.textContent = msg || "";
+    });
   }
 
   function todayLocal() {
@@ -771,6 +946,15 @@
       option.textContent = m.nickname ? `${m.nickname} (${m.name})` : m.name;
       $("memberSelect").appendChild(option);
     }
+
+    const growthSel = $("growthMemberSelect");
+    const prevGrowth = growthSel.value;
+    growthSel.innerHTML = allMembers.map(m =>
+      `<option value="${m.id}">${escapeHtml(m.nickname ? `${m.nickname} (${m.name})` : m.name)}</option>`
+    ).join("");
+    if (prevGrowth && allMembers.some(m => m.id === prevGrowth)) growthSel.value = prevGrowth;
+
+    renderVenueMap();
   }
 
   let allRows = [];
@@ -784,6 +968,15 @@
   let selectedAttendeeIds = new Set();
   let venueMap = null;
   let venueMarkers = [];
+  let memberMapMarkers = [];
+  let editingVenueId = null;
+  let allMeetups = [];
+  let meetupSelectedIds = new Set();
+  let announceSelectedIds = new Set();
+  let announceSelectedVenueId = null;
+  let growthChart = null;
+  let ocrRows = [];
+  let ocrRowSeq = 0;
 
   // 대전 5개구 동(洞) 대략적 중심 좌표 (거리 "상대 비교"용 근사치이며 정밀 지오코딩이 아님)
   // - 대전 나무위키 문서(업로드된 HTML)에서 실제 존재/존재했던 동 이름을 모두 추출해 반영
@@ -1040,15 +1233,34 @@
   }
 
   window.showTab = function (name) {
-    const isRecords = name === "records";
-    $("tabRecords").style.display = isRecords ? "block" : "none";
-    $("tabVenue").style.display = isRecords ? "none" : "block";
-    $("tabBtnRecords").classList.toggle("active", isRecords);
-    $("tabBtnVenue").classList.toggle("active", !isRecords);
-    if (!isRecords) {
+    const TABS = ["records", "ocr", "growth", "handicap", "venue", "meetuplog", "announce"];
+    const ids = { records: "tabRecords", ocr: "tabOcr", growth: "tabGrowth", handicap: "tabHandicap", venue: "tabVenue", meetuplog: "tabMeetupLog", announce: "tabAnnounce" };
+    const btnIds = { records: "tabBtnRecords", ocr: "tabBtnOcr", growth: "tabBtnGrowth", handicap: "tabBtnHandicap", venue: "tabBtnVenue", meetuplog: "tabBtnMeetupLog", announce: "tabBtnAnnounce" };
+    TABS.forEach(t => {
+      $(ids[t]).style.display = t === name ? "block" : "none";
+      $(btnIds[t]).classList.toggle("active", t === name);
+    });
+    if (name === "venue") {
       ensureVenueMap();
       venueMap.invalidateSize();
       renderVenueMap();
+    }
+    if (name === "ocr") {
+      updateOcrLoginUi();
+    }
+    if (name === "growth") {
+      renderGrowthChart();
+    }
+    if (name === "handicap") {
+      renderHandicapTable();
+    }
+    if (name === "meetuplog") {
+      renderMeetupLogForm();
+      renderMeetupLogList();
+    }
+    if (name === "announce") {
+      renderAnnounceAttendees();
+      renderAnnounceVenueOptions();
     }
   };
 
@@ -1061,28 +1273,58 @@
     }).addTo(venueMap);
   }
 
-  function renderVenueMap() {
+  window.renderVenueMap = function () {
     if (!venueMap) return;
 
     venueMarkers.forEach(m => venueMap.removeLayer(m));
     venueMarkers = [];
+    memberMapMarkers.forEach(m => venueMap.removeLayer(m));
+    memberMapMarkers = [];
 
-    const withCoords = allVenues.filter(v => DONG_COORDS[v.dong]);
-    withCoords.forEach(v => {
-      const marker = L.marker(DONG_COORDS[v.dong]).addTo(venueMap);
-      marker.bindPopup(
-        `<b>${escapeHtml(v.name)}</b><br>${escapeHtml(v.dong)}` +
-        (v.address ? `<br>${escapeHtml(v.address)}` : "")
-      );
-      venueMarkers.push(marker);
-    });
+    const showVenues = $("toggleVenueMarkers") ? $("toggleVenueMarkers").checked : true;
+    const showMembers = $("toggleMemberMarkers") ? $("toggleMemberMarkers").checked : true;
 
-    if (withCoords.length) {
-      venueMap.fitBounds(L.featureGroup(venueMarkers).getBounds().pad(0.25));
+    if (showVenues) {
+      allVenues.filter(v => DONG_COORDS[v.dong]).forEach(v => {
+        const marker = L.marker(DONG_COORDS[v.dong]).addTo(venueMap);
+        marker.bindPopup(
+          `<b>🎳 ${escapeHtml(v.name)}</b><br>${escapeHtml(v.dong)}` +
+          (v.address ? `<br>${escapeHtml(v.address)}` : "")
+        );
+        venueMarkers.push(marker);
+      });
+    }
+
+    if (showMembers) {
+      // 회원을 동(洞) 단위로 묶어서 하나의 마커에 별명을 함께 표시 (같은 동에 여러 명이면 겹치지 않게)
+      const byDong = new Map();
+      allMembers.filter(m => m.dong && DONG_COORDS[m.dong]).forEach(m => {
+        if (!byDong.has(m.dong)) byDong.set(m.dong, []);
+        byDong.get(m.dong).push(m);
+      });
+      byDong.forEach((members, dong) => {
+        const icon = L.divIcon({
+          className: "",
+          html: `<div class="member-pin">${members.length}</div>`,
+          iconSize: [26, 26],
+          iconAnchor: [13, 13],
+        });
+        const marker = L.marker(DONG_COORDS[dong], { icon }).addTo(venueMap);
+        const names = members
+          .map(m => `${escapeHtml(m.nickname || m.name)}${m.has_car ? " 🚗" : ""}`)
+          .join("<br>");
+        marker.bindPopup(`<b>🙋 ${escapeHtml(dong)}</b><br>${names}`);
+        memberMapMarkers.push(marker);
+      });
+    }
+
+    const allMarkers = [...venueMarkers, ...memberMapMarkers];
+    if (allMarkers.length) {
+      venueMap.fitBounds(L.featureGroup(allMarkers).getBounds().pad(0.25));
     } else {
       venueMap.setView([36.35, 127.38], 11);
     }
-  }
+  };
 
   async function loadScores() {
     const { data, error } = await db
@@ -1372,6 +1614,9 @@
     if (allVenues.length) renderVenues();
     renderAttendees();
     renderVenueRecommendation();
+    if ($("tabMeetupLog").style.display !== "none") renderMeetupLogForm();
+    if (allMeetups.length) renderMeetupLogList();
+    updateOcrLoginUi();
   }
 
   async function refreshPermissions() {
@@ -1531,6 +1776,7 @@
     await loadMembers();
     renderAttendees();
     renderVenueRecommendation();
+    renderVenueMap();
   };
 
   async function loadVenues() {
@@ -1560,7 +1806,7 @@
     const total = allVenues.length;
     const wrap = document.createElement("div");
     allVenues.forEach((v, idx) => {
-      const canDelete = isAdminUser || (currentUserId && v.created_by === currentUserId);
+      const canEdit = isAdminUser || (currentUserId && v.created_by === currentUserId);
       const card = document.createElement("div");
       const hidden = !venueListExpanded && idx >= VENUE_COLLAPSE_COUNT;
       card.className = "venue-card" + (hidden ? " venue-card-hidden" : "");
@@ -1568,10 +1814,11 @@
         <div class="vname">${escapeHtml(v.name)}</div>
         <div class="vmeta">📍 ${escapeHtml(v.dong)}${v.address ? " · " + escapeHtml(v.address) : ""}${v.price_info ? " · 💰 " + escapeHtml(v.price_info) : ""}</div>
         ${v.review ? `<div class="vreview">${escapeHtml(v.review)}</div>` : ""}
-        ${canDelete ? `<button class="danger" data-id="${v.id}" style="margin-top:8px;">삭제</button>` : ""}
+        ${canEdit ? `<div class="vedit-row"><button class="ghost" data-edit="${v.id}">수정</button><button class="danger" data-id="${v.id}">삭제</button></div>` : ""}
       `;
-      if (canDelete) {
+      if (canEdit) {
         card.querySelector(".danger").addEventListener("click", () => deleteVenue(v.id));
+        card.querySelector("[data-edit]").addEventListener("click", () => startEditVenue(v));
       }
       wrap.appendChild(card);
     });
@@ -1593,7 +1840,32 @@
     }
   }
 
-  window.addVenue = async function () {
+  window.startEditVenue = function (v) {
+    editingVenueId = v.id;
+    $("venueName").value = v.name || "";
+    $("venueDong").value = v.dong || "";
+    $("venueAddress").value = v.address || "";
+    $("venuePrice").value = v.price_info || "";
+    $("venueReview").value = v.review || "";
+    $("venueWriteBoxTitle").textContent = "볼링장 정보 수정";
+    $("venueSubmitBtn").textContent = "수정 저장";
+    $("venueCancelEditBtn").style.display = "inline-block";
+    $("venueWriteBox").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  };
+
+  window.cancelEditVenue = function () {
+    editingVenueId = null;
+    $("venueName").value = "";
+    $("venueDong").value = "";
+    $("venueAddress").value = "";
+    $("venuePrice").value = "";
+    $("venueReview").value = "";
+    $("venueWriteBoxTitle").textContent = "볼링장 등록";
+    $("venueSubmitBtn").textContent = "등록";
+    $("venueCancelEditBtn").style.display = "none";
+  };
+
+  window.saveVenue = async function () {
     const name = $("venueName").value.trim();
     const dong = $("venueDong").value.trim();
     const address = $("venueAddress").value.trim();
@@ -1604,21 +1876,25 @@
     if (!dong) return setStatus("동을 입력하세요.");
     if (!currentUserId) return setStatus("로그인이 필요합니다.");
 
-    const { error } = await db.from("bowling_venues").insert({
+    const payload = {
       name, dong,
       address: address || null,
       price_info: priceInfo || null,
       review: review || null,
-      created_by: currentUserId,
-    });
+    };
 
-    if (error) return setStatus("볼링장 등록 실패: " + error.message);
+    let error;
+    if (editingVenueId) {
+      ({ error } = await db.from("bowling_venues").update(payload).eq("id", editingVenueId));
+    } else {
+      ({ error } = await db.from("bowling_venues").insert({ ...payload, created_by: currentUserId }));
+    }
 
-    $("venueName").value = "";
-    $("venueAddress").value = "";
-    $("venuePrice").value = "";
-    $("venueReview").value = "";
-    setStatus("볼링장을 등록했습니다.");
+    if (error) return setStatus((editingVenueId ? "볼링장 수정 실패: " : "볼링장 등록 실패: ") + error.message);
+
+    const wasEditing = !!editingVenueId;
+    cancelEditVenue();
+    setStatus(wasEditing ? "볼링장 정보를 수정했습니다." : "볼링장을 등록했습니다.");
     await loadVenues();
     renderVenueRecommendation();
   };
@@ -1627,6 +1903,7 @@
     if (!confirm("이 볼링장을 삭제할까요?")) return;
     const { error } = await db.from("bowling_venues").delete().eq("id", id);
     if (error) return setStatus("삭제 실패: " + error.message);
+    if (editingVenueId === id) cancelEditVenue();
     setStatus("볼링장을 삭제했습니다.");
     await loadVenues();
     renderVenueRecommendation();
@@ -1664,20 +1941,9 @@
     renderVenueRecommendation();
   }
 
-  function renderVenueRecommendation() {
-    if (!selectedAttendeeIds.size) {
-      $("venueRecommendArea").innerHTML = `<div class="empty">참석자를 체크하면 추천 결과가 표시됩니다.</div>`;
-      return;
-    }
-
-    if (!allVenues.length) {
-      $("venueRecommendArea").innerHTML = `<div class="empty">등록된 볼링장이 없습니다.</div>`;
-      return;
-    }
-
-    const attendees = allMembers.filter(m => selectedAttendeeIds.has(m.id));
-    const noCarCount = attendees.filter(m => !m.has_car).length;
-
+  // 참석자 목록을 기준으로 등록된 모든 볼링장을 거리순으로 정렬해서 돌려주는 공용 함수.
+  // 모임장소 추천 탭과 모임 공지 만들기 탭에서 함께 사용합니다.
+  function computeVenueRanking(attendees) {
     // 자차 없는 회원의 거리를 더 우선적으로 고려하기 위한 가중치.
     // 값이 클수록 "자차 없는 회원과 가까운 곳"을 더 강하게 우선함. 필요하면 숫자만 조정하면 됨.
     const NO_CAR_WEIGHT = 2;
@@ -1689,7 +1955,6 @@
     const weighted = attendeeCoords.map(a => ({ coord: a.coord, weight: a.hasCar ? CAR_WEIGHT : NO_CAR_WEIGHT }));
     const carCoords = attendeeCoords.filter(a => a.hasCar);
     const noCarCoords = attendeeCoords.filter(a => !a.hasCar);
-
     const avg = arr => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null);
 
     const ranked = allVenues.map(v => {
@@ -1710,6 +1975,28 @@
       return a.weightedAvgDist - b.weightedAvgDist;
     });
 
+    return {
+      ranked,
+      noCarCount: attendees.filter(m => !m.has_car).length,
+      unknownCount: attendees.length - weighted.length,
+      NO_CAR_WEIGHT,
+    };
+  }
+
+  function renderVenueRecommendation() {
+    if (!selectedAttendeeIds.size) {
+      $("venueRecommendArea").innerHTML = `<div class="empty">참석자를 체크하면 추천 결과가 표시됩니다.</div>`;
+      return;
+    }
+
+    if (!allVenues.length) {
+      $("venueRecommendArea").innerHTML = `<div class="empty">등록된 볼링장이 없습니다.</div>`;
+      return;
+    }
+
+    const attendees = allMembers.filter(m => selectedAttendeeIds.has(m.id));
+    const { ranked, noCarCount, unknownCount, NO_CAR_WEIGHT } = computeVenueRanking(attendees);
+
     const medals = ["🥇", "🥈", "🥉"];
     const rows = ranked.slice(0, 3).map((v, i) => `
       <div style="margin-bottom:8px;">
@@ -1725,8 +2012,8 @@
       </div>
     `).join("");
 
-    const unknownCount = attendees.length - weighted.length;
-    const carNote = `<div class="sub" style="margin-top:6px;">🚗 자차 없는 참석자: ${noCarCount}명 / 총 ${attendees.length}명${unknownCount ? ` · 동 정보 미입력 ${unknownCount}명` : ""} (자차 없는 회원 거리 ${NO_CAR_WEIGHT}배 가중)</div>`;
+    const unknownNote = unknownCount ? ` · 동 정보 미입력 ${unknownCount}명` : "";
+    const carNote = `<div class="sub" style="margin-top:6px;">🚗 자차 없는 참석자: ${noCarCount}명 / 총 ${attendees.length}명${unknownNote} (자차 없는 회원 거리 ${NO_CAR_WEIGHT}배 가중)</div>`;
 
     $("venueRecommendArea").innerHTML = rows + carNote;
   }
@@ -1864,6 +2151,493 @@
     await loadScores();
   }
 
+  // ============================================================
+  // 📷 점수표 사진 인식(OCR) 등록
+  // ============================================================
+  function updateOcrLoginUi() {
+    const loggedIn = !!currentUserId;
+    $("ocrLoginNotice").style.display = loggedIn ? "none" : "block";
+  }
+
+  window.onOcrFileChange = function (e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    $("ocrPreview").src = url;
+    $("ocrPreviewWrap").style.display = "block";
+    $("ocrRunBtn").disabled = false;
+    $("ocrResultBox").style.display = "none";
+    ocrRows = [];
+  };
+
+  window.runOcr = async function () {
+    const file = $("ocrFileInput").files[0];
+    if (!file) return setStatus("먼저 사진을 선택하세요.");
+    if (typeof Tesseract === "undefined") return setStatus("인식 라이브러리를 불러오지 못했어요. 인터넷 연결을 확인해주세요.");
+
+    $("ocrRunBtn").disabled = true;
+    $("ocrProgress").style.display = "block";
+    $("ocrProgress").textContent = "이미지를 분석하는 중... (처음엔 시간이 좀 걸려요)";
+
+    try {
+      const { data } = await Tesseract.recognize(file, "eng", {
+        logger: (m) => {
+          if (m.status === "recognizing text" && typeof m.progress === "number") {
+            $("ocrProgress").textContent = `텍스트 인식 중... ${Math.round(m.progress * 100)}%`;
+          } else if (m.status) {
+            $("ocrProgress").textContent = m.status;
+          }
+        },
+      });
+      buildOcrRowsFromText(data.text || "");
+    } catch (err) {
+      setStatus("사진 인식에 실패했어요: " + err.message);
+    } finally {
+      $("ocrRunBtn").disabled = false;
+      $("ocrProgress").style.display = "none";
+    }
+  };
+
+  function buildOcrRowsFromText(text) {
+    const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+    ocrRows = [];
+    ocrRowSeq = 0;
+
+    lines.forEach(line => {
+      // 0~300 사이의 "그럴듯한 점수" 숫자만 후보로 추출.
+      // 전광판 사진에는 프레임별 소계, 날짜, 레인 번호 등도 함께 찍히므로 완벽하지 않습니다.
+      const numbers = (line.match(/\b\d{1,3}\b/g) || [])
+        .map(n => parseInt(n, 10))
+        .filter(n => n >= 0 && n <= 300);
+
+      if (!numbers.length) return;
+      // 한 줄에서 가장 마지막 숫자(보통 총점 위치)를 점수 후보로 사용
+      const candidate = numbers[numbers.length - 1];
+      ocrRows.push({ id: ++ocrRowSeq, rawText: line, memberId: "", score: candidate });
+    });
+
+    if (!ocrRows.length) {
+      ocrRows.push({ id: ++ocrRowSeq, rawText: "(숫자를 인식하지 못했어요 - 직접 입력하세요)", memberId: "", score: "" });
+    }
+
+    if (!$("ocrPlayedAt").value) $("ocrPlayedAt").value = todayLocal();
+    $("ocrResultBox").style.display = "block";
+    renderOcrRows();
+    setStatus(`${ocrRows.length}개 줄을 인식했어요. 회원과 점수를 확인한 뒤 저장하세요.`);
+  }
+
+  function renderOcrRows() {
+    const tbody = $("ocrRowsBody");
+    tbody.innerHTML = ocrRows.map(row => `
+      <tr data-row="${row.id}">
+        <td style="max-width:150px;font-size:12px;color:#737a73;word-break:break-all;">${escapeHtml(row.rawText)}</td>
+        <td>
+          <select data-field="memberId" style="min-width:130px;">
+            <option value="">회원 선택</option>
+            ${allMembers.map(m => `<option value="${m.id}" ${row.memberId === m.id ? "selected" : ""}>${escapeHtml(m.nickname ? `${m.nickname} (${m.name})` : m.name)}</option>`).join("")}
+          </select>
+        </td>
+        <td><input type="number" min="0" max="300" data-field="score" value="${row.score}" style="width:70px;"></td>
+        <td><button class="danger" data-action="remove">삭제</button></td>
+      </tr>
+    `).join("");
+
+    tbody.querySelectorAll("tr").forEach(tr => {
+      const id = Number(tr.dataset.row);
+      tr.querySelector('[data-field="memberId"]').addEventListener("change", (e) => {
+        const row = ocrRows.find(r => r.id === id);
+        if (row) row.memberId = e.target.value;
+      });
+      tr.querySelector('[data-field="score"]').addEventListener("input", (e) => {
+        const row = ocrRows.find(r => r.id === id);
+        if (row) row.score = e.target.value;
+      });
+      tr.querySelector('[data-action="remove"]').addEventListener("click", () => {
+        ocrRows = ocrRows.filter(r => r.id !== id);
+        renderOcrRows();
+      });
+    });
+  }
+
+  window.addOcrRow = function () {
+    ocrRows.push({ id: ++ocrRowSeq, rawText: "(직접 추가)", memberId: "", score: "" });
+    renderOcrRows();
+  };
+
+  window.saveOcrScores = async function () {
+    if (!currentUserId) return setStatus("로그인이 필요합니다.");
+    const playedAt = $("ocrPlayedAt").value;
+    if (!playedAt) return setStatus("활동 날짜를 선택하세요.");
+
+    const payload = ocrRows
+      .filter(r => r.memberId && r.score !== "" && r.score !== null && !isNaN(parseInt(r.score, 10)))
+      .map(r => ({
+        member_id: r.memberId,
+        score: Math.max(0, Math.min(300, parseInt(r.score, 10))),
+        played_at: playedAt,
+      }));
+
+    if (!payload.length) return setStatus("저장할 항목이 없습니다. 회원과 점수를 확인해주세요.");
+
+    setStatus("저장 중...");
+    const { error } = await db.from("bowling_scores").insert(payload);
+    if (error) return setStatus("저장 실패: " + error.message);
+
+    setStatus(`${payload.length}건의 점수를 저장했습니다.`);
+    ocrRows = [];
+    $("ocrResultBox").style.display = "none";
+    $("ocrFileInput").value = "";
+    $("ocrPreviewWrap").style.display = "none";
+    $("ocrRunBtn").disabled = true;
+    await loadScores();
+  };
+
+  // ============================================================
+  // 📈 개인 성장 그래프
+  // ============================================================
+  window.renderGrowthChart = function () {
+    const sel = $("growthMemberSelect");
+    const canvasWrap = $("growthCanvas").parentElement;
+    if (!sel.value) {
+      canvasWrap.style.display = "none";
+      $("growthEmpty").style.display = "block";
+      return;
+    }
+    const memberId = sel.value;
+    const rows = allRows
+      .filter(r => r.member_id === memberId)
+      .slice()
+      .sort((a, b) => `${a.played_at}_${a.created_at}`.localeCompare(`${b.played_at}_${b.created_at}`));
+
+    if (!rows.length) {
+      canvasWrap.style.display = "none";
+      $("growthEmpty").style.display = "block";
+      $("growthGames").textContent = "0";
+      $("growthHigh").textContent = "-";
+      $("growthAvg").textContent = "-";
+      return;
+    }
+    canvasWrap.style.display = "block";
+    $("growthEmpty").style.display = "none";
+
+    const scores = rows.map(r => r.score);
+    const labels = rows.map(r => r.played_at);
+    const games = scores.length;
+    const high = Math.max(...scores);
+    const avg = scores.reduce((a, b) => a + b, 0) / games;
+
+    $("growthGames").textContent = games;
+    $("growthHigh").textContent = high;
+    $("growthAvg").textContent = avg.toFixed(1);
+
+    // 최근 5게임 이동평균 (성장 흐름을 부드럽게 보여주기 위함)
+    const movingAvg = scores.map((_, i) => {
+      const start = Math.max(0, i - 4);
+      const slice = scores.slice(start, i + 1);
+      return +(slice.reduce((a, b) => a + b, 0) / slice.length).toFixed(1);
+    });
+
+    if (growthChart) growthChart.destroy();
+    growthChart = new Chart($("growthCanvas"), {
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: "게임 점수",
+            data: scores,
+            borderColor: "#b9c3b5",
+            backgroundColor: "rgba(47,125,60,0.08)",
+            borderWidth: 1.5,
+            pointRadius: 2,
+            tension: 0.2,
+          },
+          {
+            label: "최근 5게임 평균",
+            data: movingAvg,
+            borderColor: "#2f7d3c",
+            borderWidth: 2.5,
+            pointRadius: 0,
+            tension: 0.25,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: { y: { suggestedMin: 0, suggestedMax: 300 } },
+        plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } } },
+      },
+    });
+  };
+
+  // ============================================================
+  // 🎯 핸디캡 계산
+  // ============================================================
+  window.renderHandicapTable = function () {
+    const base = parseFloat($("hcBaseScore").value);
+    const weightRaw = parseFloat($("hcWeight").value);
+    const baseScore = isNaN(base) ? 200 : base;
+    const weight = isNaN(weightRaw) ? 0.8 : weightRaw;
+
+    const stats = computeStats(allRows);
+    const tbody = $("handicapBody");
+    if (!stats.length) {
+      tbody.innerHTML = `<tr><td colspan="5" class="empty">기록이 없습니다.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = stats.map(s => {
+      const hc = Math.max(0, Math.round((baseScore - s.avg) * weight));
+      const applied = (s.avg + hc).toFixed(1);
+      return `<tr>
+        <td>${memberDisplay(s.name, s.nickname)}</td>
+        <td>${s.games}</td>
+        <td>${s.avg.toFixed(1)}</td>
+        <td>${hc}</td>
+        <td>${applied}</td>
+      </tr>`;
+    }).join("");
+  };
+
+  window.resetHandicapSettings = function () {
+    $("hcBaseScore").value = 200;
+    $("hcWeight").value = 0.8;
+    renderHandicapTable();
+  };
+
+  // ============================================================
+  // 🗓 모임 기록 (다녀온 볼링장 + 참여자)
+  // ============================================================
+  async function loadMeetupLogs() {
+    const { data, error } = await db
+      .from("bowling_meetups")
+      .select("id,meetup_date,note,venue_id,created_by,created_at,bowling_venues(name,dong),bowling_meetup_attendees(member_id,bowling_members(name,nickname))")
+      .order("meetup_date", { ascending: false })
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      allMeetups = [];
+      $("meetupLogArea").innerHTML = `<div class="empty">모임 기록을 불러오지 못했습니다.</div>`;
+      return;
+    }
+    allMeetups = data || [];
+    renderMeetupLogList();
+  }
+
+  function populateMeetupVenueSelect() {
+    const sel = $("meetupVenueSelect");
+    const prev = sel.value;
+    sel.innerHTML = `<option value="">간 볼링장 선택 (선택)</option>` +
+      allVenues.map(v => `<option value="${v.id}">${escapeHtml(v.name)} (${escapeHtml(v.dong)})</option>`).join("");
+    if (prev && allVenues.some(v => v.id === prev)) sel.value = prev;
+  }
+
+  window.renderMeetupLogForm = function () {
+    if (!$("meetupDate").value) $("meetupDate").value = todayLocal();
+    populateMeetupVenueSelect();
+    renderMeetupAttendeeChecks();
+    const loggedIn = !!currentUserId;
+    $("meetupWriteBox").style.display = loggedIn ? "block" : "none";
+    $("meetupLoginNotice").style.display = loggedIn ? "none" : "block";
+  };
+
+  function renderMeetupAttendeeChecks() {
+    if (!allMembers.length) {
+      $("meetupAttendeeArea").innerHTML = `<div class="empty">등록된 회원이 없습니다.</div>`;
+      return;
+    }
+    const list = document.createElement("div");
+    list.className = "attendee-list";
+    allMembers.forEach(m => {
+      const checked = meetupSelectedIds.has(m.id);
+      const chip = document.createElement("div");
+      chip.className = "attendee-chip" + (checked ? " checked" : "");
+      chip.innerHTML = memberDisplay(m.name, m.nickname);
+      chip.addEventListener("click", () => {
+        if (meetupSelectedIds.has(m.id)) meetupSelectedIds.delete(m.id);
+        else meetupSelectedIds.add(m.id);
+        renderMeetupAttendeeChecks();
+      });
+      list.appendChild(chip);
+    });
+    $("meetupAttendeeArea").innerHTML = "";
+    $("meetupAttendeeArea").appendChild(list);
+  }
+
+  window.saveMeetupLog = async function () {
+    if (!currentUserId) return setStatus("로그인이 필요합니다.");
+    const meetupDate = $("meetupDate").value;
+    if (!meetupDate) return setStatus("날짜를 선택하세요.");
+    const venueId = $("meetupVenueSelect").value || null;
+    const note = $("meetupNote").value.trim() || null;
+
+    const { data: meetup, error } = await db
+      .from("bowling_meetups")
+      .insert({ meetup_date: meetupDate, venue_id: venueId, note, created_by: currentUserId })
+      .select()
+      .single();
+
+    if (error) return setStatus("모임 기록 저장 실패: " + error.message);
+
+    if (meetupSelectedIds.size) {
+      const rows = [...meetupSelectedIds].map(memberId => ({ meetup_id: meetup.id, member_id: memberId }));
+      const { error: attErr } = await db.from("bowling_meetup_attendees").insert(rows);
+      if (attErr) {
+        setStatus("모임은 저장됐지만 참여자 저장에 실패했습니다: " + attErr.message);
+      } else {
+        setStatus("모임 기록을 저장했습니다.");
+      }
+    } else {
+      setStatus("모임 기록을 저장했습니다.");
+    }
+
+    meetupSelectedIds = new Set();
+    $("meetupNote").value = "";
+    await loadMeetupLogs();
+    renderMeetupLogForm();
+  };
+
+  function renderMeetupLogList() {
+    if (!allMeetups.length) {
+      $("meetupLogArea").innerHTML = `<div class="empty">아직 기록된 모임이 없습니다.</div>`;
+      return;
+    }
+    const wrap = document.createElement("div");
+    allMeetups.forEach(m => {
+      const canDelete = isAdminUser || (currentUserId && m.created_by === currentUserId);
+      const venueLabel = m.bowling_venues ? `${escapeHtml(m.bowling_venues.name)} (${escapeHtml(m.bowling_venues.dong)})` : "장소 미기록";
+      const attendeeNames = (m.bowling_meetup_attendees || [])
+        .map(a => a.bowling_members ? escapeHtml(a.bowling_members.nickname || a.bowling_members.name) : null)
+        .filter(Boolean)
+        .join(", ") || "참여자 없음";
+      const card = document.createElement("div");
+      card.className = "venue-card";
+      card.innerHTML = `
+        <div class="vname">${escapeHtml(m.meetup_date)} · 📍 ${venueLabel}</div>
+        <div class="vmeta">🙋 ${attendeeNames}</div>
+        ${m.note ? `<div class="vreview">${escapeHtml(m.note)}</div>` : ""}
+        ${canDelete ? `<button class="danger" style="margin-top:8px;" data-id="${m.id}">삭제</button>` : ""}
+      `;
+      if (canDelete) {
+        card.querySelector(".danger").addEventListener("click", () => deleteMeetupLog(m.id));
+      }
+      wrap.appendChild(card);
+    });
+    $("meetupLogArea").innerHTML = "";
+    $("meetupLogArea").appendChild(wrap);
+  }
+
+  async function deleteMeetupLog(id) {
+    if (!confirm("이 모임 기록을 삭제할까요? (참여자 기록도 함께 삭제됩니다)")) return;
+    const { error } = await db.from("bowling_meetups").delete().eq("id", id);
+    if (error) return setStatus("삭제 실패: " + error.message);
+    setStatus("모임 기록을 삭제했습니다.");
+    await loadMeetupLogs();
+  }
+
+  // ============================================================
+  // 📢 모임 공지 만들기
+  // ============================================================
+  window.renderAnnounceAttendees = function () {
+    if (!$("announceDate").value) $("announceDate").value = todayLocal();
+    if (!allMembers.length) {
+      $("announceAttendeeArea").innerHTML = `<div class="empty">등록된 회원이 없습니다.</div>`;
+      return;
+    }
+    const list = document.createElement("div");
+    list.className = "attendee-list";
+    allMembers.forEach(m => {
+      const checked = announceSelectedIds.has(m.id);
+      const chip = document.createElement("div");
+      chip.className = "attendee-chip" + (checked ? " checked" : "");
+      chip.innerHTML = memberDisplay(m.name, m.nickname) + (m.has_car ? " 🚗" : "");
+      chip.addEventListener("click", () => {
+        if (announceSelectedIds.has(m.id)) announceSelectedIds.delete(m.id);
+        else announceSelectedIds.add(m.id);
+        renderAnnounceAttendees();
+        renderAnnounceVenueOptions();
+      });
+      list.appendChild(chip);
+    });
+    $("announceAttendeeArea").innerHTML = "";
+    $("announceAttendeeArea").appendChild(list);
+  };
+
+  window.renderAnnounceVenueOptions = function () {
+    if (!announceSelectedIds.size) {
+      $("announceVenueArea").innerHTML = `<div class="empty">참여자를 선택하면 추천 장소가 표시됩니다.</div>`;
+      announceSelectedVenueId = null;
+      return;
+    }
+    if (!allVenues.length) {
+      $("announceVenueArea").innerHTML = `<div class="empty">등록된 볼링장이 없습니다. 먼저 볼링장을 등록해주세요.</div>`;
+      announceSelectedVenueId = null;
+      return;
+    }
+    const attendees = allMembers.filter(m => announceSelectedIds.has(m.id));
+    const { ranked } = computeVenueRanking(attendees);
+    const top = ranked.slice(0, 5);
+
+    if (!top.some(v => v.id === announceSelectedVenueId)) {
+      announceSelectedVenueId = top[0] ? top[0].id : null;
+    }
+
+    const wrap = document.createElement("div");
+    wrap.className = "attendee-list";
+    top.forEach((v, i) => {
+      const chip = document.createElement("div");
+      const checked = announceSelectedVenueId === v.id;
+      chip.className = "attendee-chip" + (checked ? " checked" : "");
+      const distLabel = v.weightedAvgDist != null ? ` · ${v.weightedAvgDist.toFixed(1)}km` : "";
+      chip.textContent = `${i === 0 ? "🥇 " : ""}${v.name} (${v.dong})${distLabel}`;
+      chip.addEventListener("click", () => {
+        announceSelectedVenueId = v.id;
+        renderAnnounceVenueOptions();
+      });
+      wrap.appendChild(chip);
+    });
+    $("announceVenueArea").innerHTML = "";
+    $("announceVenueArea").appendChild(wrap);
+  };
+
+  window.generateAnnouncement = function () {
+    const date = $("announceDate").value;
+    if (!date) return setStatus("날짜를 선택하세요.");
+    if (!announceSelectedIds.size) return setStatus("참여자를 선택하세요.");
+    if (!announceSelectedVenueId) return setStatus("추천 장소 중 하나를 선택하세요.");
+
+    const time = $("announceTime").value.trim();
+    const venue = allVenues.find(v => v.id === announceSelectedVenueId);
+    const attendees = allMembers.filter(m => announceSelectedIds.has(m.id));
+    const names = attendees.map(m => m.nickname || m.name).join(", ");
+
+    const lines = [
+      "🎳 데굴데굴 볼링 모임 공지",
+      "",
+      `📅 날짜: ${date}`,
+      time ? `⏰ 집합 시간: ${time}` : null,
+      `📍 장소: ${venue.name} (${venue.dong})${venue.address ? " - " + venue.address : ""}`,
+      `🙋 참여자 (${attendees.length}명): ${names}`,
+      "",
+      "즐거운 볼링 시간 되어요! 🎉",
+    ].filter(v => v !== null);
+
+    $("announceResultText").value = lines.join("\n");
+    $("announceResultBox").style.display = "block";
+    setStatus("모임 공지를 생성했습니다.");
+  };
+
+  window.copyAnnouncement = async function () {
+    const text = $("announceResultText").value;
+    try {
+      await navigator.clipboard.writeText(text);
+      setStatus("공지 내용을 복사했습니다. 게시판에 붙여넣으세요!");
+    } catch (e) {
+      $("announceResultText").select();
+      setStatus("자동 복사에 실패했어요. 텍스트를 직접 선택해서 복사해주세요.");
+    }
+  };
+
   db.auth.onAuthStateChange(() => refreshAuthUi());
 
   populateDongSelects();
@@ -1873,6 +2647,7 @@
   await loadScores();
   await loadComments();
   await loadVenues();
+  await loadMeetupLogs();
 </script>
 </body>
 </html>
