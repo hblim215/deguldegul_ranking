@@ -482,6 +482,7 @@
   </div>
 
   <div id="tabVenue" style="display:none;">
+    <div class="status" id="venueStatus"></div>
     <div class="dashboard-layout">
       <div class="main-col">
         <div class="section">
@@ -722,6 +723,8 @@
 
   function setStatus(msg) {
     $("status").textContent = msg || "";
+    const venueStatus = $("venueStatus");
+    if (venueStatus) venueStatus.textContent = msg || "";
   }
 
   function todayLocal() {
