@@ -174,6 +174,167 @@
       color: #202420;
       margin-bottom: 18px;
     }
+    .dashboard-layout {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+    .side-col {
+      display: grid;
+      gap: 12px;
+    }
+    .side-card .label {
+      color: #737a73;
+      font-size: 12px;
+      margin-bottom: 8px;
+      font-weight: 700;
+    }
+    .side-card .value {
+      font-size: 18px;
+      font-weight: 800;
+    }
+    .side-card .sub {
+      font-size: 12px;
+      color: #8a908a;
+      margin-top: 4px;
+      font-weight: 500;
+    }
+    .comment-list {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 10px;
+      max-height: 260px;
+      overflow-y: auto;
+    }
+    .comment-item {
+      border: 1px solid #e5e8e5;
+      border-radius: 8px;
+      padding: 8px 10px;
+      background: #fafbfa;
+    }
+    .comment-item .meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+      color: #737a73;
+      font-size: 11px;
+    }
+    .comment-item .meta button {
+      padding: 2px 8px;
+      font-size: 11px;
+      margin-top: 0;
+      width: auto;
+    }
+    .comment-item .content {
+      font-size: 13px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    #commentWriteBox textarea {
+      width: 100%;
+      resize: vertical;
+      font-family: inherit;
+      font-size: 13px;
+      padding: 8px;
+      border: 1px solid #d9dcd9;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      box-sizing: border-box;
+    }
+    #commentWriteBox .primary {
+      margin-top: 0;
+    }
+    .tab-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .tab-btn {
+      width: auto;
+      padding: 10px 18px;
+      border-radius: 10px;
+      border: 1px solid #d9dcd9;
+      background: #fff;
+      color: #6d746d;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 0;
+    }
+    .tab-btn.active {
+      background: #2f7d3c;
+      border-color: #2f7d3c;
+      color: #fff;
+    }
+    .venue-card {
+      border: 1px solid #e5e8e5;
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+    }
+    .venue-card .vname {
+      font-weight: 800;
+      font-size: 15px;
+    }
+    .venue-card .vmeta {
+      font-size: 12px;
+      color: #737a73;
+      margin: 4px 0;
+    }
+    .venue-card .vreview {
+      font-size: 13px;
+      color: #444a44;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .attendee-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 10px 0;
+    }
+    .attendee-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid #d9dcd9;
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 13px;
+      cursor: pointer;
+      background: #fff;
+    }
+    .attendee-chip.checked {
+      background: #2f7d3c;
+      border-color: #2f7d3c;
+      color: #fff;
+    }
+    .rank-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+    .rank-controls label {
+      font-size: 13px;
+      color: #6d746d;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .rank-controls select {
+      width: auto;
+      min-width: 130px;
+    }
+    .rank-controls .secondary {
+      margin-top: 0;
+      white-space: nowrap;
+    }
+    @media (max-width: 900px) {
+      .dashboard-layout { grid-template-columns: 1fr; }
+    }
     @media (max-width: 700px) {
       .grid, .form-grid, .scores { grid-template-columns: 1fr; }
       .hero h1 { font-size: 25px; }
@@ -185,18 +346,60 @@
 <div class="wrap">
   <div class="hero">
     <h1>🎳 데굴데굴 볼링 기록실</h1>
-    <p>정기 활동 점수를 기록합니다. 에버리지와 최고점은 자동 계산됩니다.</p>
+    <p>정기 활동 점수를 차곡차곡 쌓아보세요. 에버리지와 최고점은 자동 계산됩니다.</p>
   </div>
 
+  <div class="tab-bar">
+    <button class="tab-btn active" id="tabBtnRecords" onclick="showTab('records')">🎳 기록실</button>
+    <button class="tab-btn" id="tabBtnVenue" onclick="showTab('venue')">📍 모임장소 추천</button>
+  </div>
+
+  <div id="tabRecords">
   <div class="grid">
     <div class="card"><div class="label">등록된 게임</div><div class="value" id="totalGames">-</div></div>
     <div class="card"><div class="label">전체 최고점</div><div class="value" id="clubHigh">-</div></div>
     <div class="card"><div class="label">현재 AVG 1위</div><div class="value" id="avgLeader">-</div></div>
   </div>
 
-  <div class="section">
-    <h2>🏆 누적 에버리지 랭킹</h2>
-    <div id="rankingArea"><div class="empty">기록을 불러오는 중...</div></div>
+  <div class="dashboard-layout">
+    <div class="main-col">
+      <div class="section">
+        <h2>🏆 누적 에버리지 랭킹</h2>
+        <div class="rank-controls">
+          <label>기간</label>
+          <select id="rankMonthFilter" onchange="onRankMonthChange()">
+            <option value="all">전체</option>
+          </select>
+          <button class="secondary" onclick="exportExcel()">📥 엑셀로 내보내기</button>
+        </div>
+        <div id="rankingArea"><div class="empty">기록을 불러오는 중...</div></div>
+      </div>
+    </div>
+
+    <div class="side-col">
+      <div class="section side-card">
+        <div class="label">🗓 이달의 AVG 1위</div>
+        <div class="value" id="monthAvgLeader">-</div>
+      </div>
+      <div class="section side-card">
+        <div class="label">📈 이달의 상승률 1위</div>
+        <div class="value" id="monthImproveLeader">-</div>
+      </div>
+      <div class="section side-card">
+        <div class="label">🎯 이달의 경기수 1위</div>
+        <div class="value" id="monthGamesLeader">-</div>
+      </div>
+
+      <div class="section side-card">
+        <div class="label">💬 방명록</div>
+        <div id="commentList" class="comment-list"><div class="empty">불러오는 중...</div></div>
+        <div id="commentWriteBox" style="display:none;">
+          <textarea id="commentInput" rows="2" maxlength="500" placeholder="댓글을 남겨보세요 (500자 이내)"></textarea>
+          <button class="primary" onclick="addComment()">등록</button>
+        </div>
+        <div id="commentLoginNotice" class="note" style="display:none;">로그인 후 댓글을 작성할 수 있어요.</div>
+      </div>
+    </div>
   </div>
 
   <div class="section">
@@ -268,6 +471,94 @@
 
     <div class="status" id="status"></div>
   </div>
+  </div>
+
+  <div id="tabVenue" style="display:none;">
+    <div class="dashboard-layout">
+      <div class="main-col">
+        <div class="section">
+          <h2>🎳 볼링장 후보</h2>
+          <div id="venueArea"><div class="empty">불러오는 중...</div></div>
+
+          <div id="venueWriteBox" style="display:none;margin-top:14px;">
+            <h3 style="margin:0 0 10px;font-size:16px;">볼링장 등록</h3>
+            <div class="form-grid">
+              <input type="text" id="venueName" placeholder="볼링장 이름">
+              <select id="venueDong"></select>
+            </div>
+            <div class="form-grid" style="margin-top:10px;">
+              <input type="text" id="venueAddress" placeholder="상세 주소 (선택)">
+              <input type="text" id="venuePrice" placeholder="가격 정보 (선택)">
+            </div>
+            <textarea id="venueReview" rows="2" placeholder="후기 (선택)" style="margin-top:10px;"></textarea>
+            <button class="primary" onclick="addVenue()">등록</button>
+          </div>
+          <div id="venueLoginNotice" class="note" style="display:none;">로그인 후 볼링장을 등록할 수 있어요.</div>
+        </div>
+
+        <div class="section">
+          <h2>🗓 모임 만들기 &amp; 참석 체크</h2>
+
+          <div id="meetupWriteBox" style="display:none;">
+            <div class="form-grid">
+              <input type="date" id="meetupDate">
+              <input type="text" id="meetupNote" placeholder="모임 설명 (선택)">
+            </div>
+            <button class="primary" onclick="addMeetup()">모임 만들기</button>
+          </div>
+          <div id="meetupLoginNotice" class="note" style="display:none;">로그인 후 모임을 만들 수 있어요.</div>
+
+          <div class="rank-controls" style="margin-top:14px;">
+            <label>모임 선택</label>
+            <select id="meetupSelect" onchange="onMeetupChange()"></select>
+          </div>
+
+          <div id="attendeeArea"><div class="empty">모임을 먼저 만들어주세요.</div></div>
+        </div>
+
+        <div class="section">
+          <h2>🎳 레인별 팀 구성</h2>
+          <div class="rank-controls">
+            <label>인원/팀</label>
+            <select id="teamSizeSelect">
+              <option value="auto">자동 (인원에 따라 2~3명)</option>
+              <option value="2">2명씩</option>
+              <option value="3">3명씩</option>
+              <option value="4">4명씩</option>
+            </select>
+            <label>방식</label>
+            <select id="teamModeSelect">
+              <option value="balanced">점수 기반 균형 팀</option>
+              <option value="random">랜덤</option>
+            </select>
+            <button class="primary" onclick="generateTeams()">팀 구성하기</button>
+          </div>
+          <div id="teamArea"><div class="empty">모임 참석자를 체크한 뒤 팀을 구성해보세요.</div></div>
+        </div>
+      </div>
+
+      <div class="side-col">
+        <div class="section side-card">
+          <div class="label">📍 추천 결과 (참석자 동 기준 평균거리)</div>
+          <div id="venueRecommendArea"><div class="empty">참석자를 체크하면 추천 결과가 표시됩니다.</div></div>
+        </div>
+
+        <div class="section side-card">
+          <div class="label">🙋 내 위치 정보</div>
+          <div id="myLocationBox" style="display:none;">
+            <div class="form-grid" style="grid-template-columns:1fr;">
+              <select id="myDong"></select>
+            </div>
+            <label style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:13px;font-weight:600;">
+              <input type="checkbox" id="myHasCar" style="width:auto;margin:0;"> 자차 있음
+            </label>
+            <button class="primary" onclick="saveMyLocation()">저장</button>
+          </div>
+          <div id="myLocationLoginNotice" class="note" style="display:none;">로그인 후 내 동/자차 정보를 등록할 수 있어요.</div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div class="modal-overlay" id="customAlertOverlay">
@@ -286,7 +577,17 @@
   const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_XzPhSkNeEoifW5cBMtethw_5N3Hx0-9";
   // ==========================================================
 
-  const db = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+  // iframe(사내 게시판 등)으로 열린 경우, 세션을 브라우저에 저장하지 않음.
+  // -> 같은 iframe URL을 여는 다른 사람에게 이전 로그인 상태가 남아 보이는 문제를 방지.
+  // (직접 사이트 주소로 접속했을 때는 평소처럼 로그인 상태가 유지됨)
+  const isEmbedded = window.self !== window.top;
+
+  const db = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    auth: {
+      persistSession: !isEmbedded,
+      autoRefreshToken: !isEmbedded,
+    }
+  });
   window.db = db;
 
   const $ = (id) => document.getElementById(id);
@@ -433,7 +734,7 @@
   async function loadMembers() {
     const { data, error } = await db
       .from("bowling_members")
-      .select("id,name,nickname")
+      .select("id,name,nickname,dong,has_car")
       .eq("active", true)
       .order("name");
 
@@ -442,14 +743,93 @@
       return;
     }
 
+    allMembers = data || [];
+
     $("memberSelect").innerHTML = "";
-    for (const m of data) {
+    for (const m of allMembers) {
       const option = document.createElement("option");
       option.value = m.id;
       option.textContent = m.nickname ? `${m.nickname} (${m.name})` : m.name;
       $("memberSelect").appendChild(option);
     }
   }
+
+  let allRows = [];
+  let isAdminUser = false;
+  let myMemberId = null;
+  let currentUserId = null;
+  let allComments = [];
+  let allMembers = [];
+  let allVenues = [];
+  let allMeetups = [];
+  let currentMeetupId = null;
+  let currentAttendeeMemberIds = [];
+
+  // 대전 주요 동(洞) 대략적 중심 좌표 (거리 "상대 비교"용 근사치이며,
+  // 정밀 지오코딩이 아닙니다. 필요하면 아래 값을 직접 수정/추가하세요.
+  const DONG_COORDS = {
+    "둔산동": [36.3504, 127.3845],
+    "갈마동": [36.3399, 127.3714],
+    "월평동": [36.3608, 127.3676],
+    "관저동": [36.3016, 127.3536],
+    "탄방동": [36.3444, 127.3925],
+    "정림동": [36.2977, 127.3789],
+    "가수원동": [36.3020, 127.3700],
+    "도마동": [36.3180, 127.3970],
+    "궁동": [36.3625, 127.3444],
+    "어은동": [36.3646, 127.3560],
+    "봉명동": [36.3599, 127.3418],
+    "노은동": [36.3789, 127.3167],
+    "지족동": [36.3908, 127.3212],
+    "전민동": [36.4013, 127.3459],
+    "도룡동": [36.3838, 127.3690],
+    "관평동": [36.4241, 127.3958],
+    "대흥동": [36.3260, 127.4258],
+    "은행동": [36.3253, 127.4212],
+    "문화동": [36.3138, 127.4165],
+    "선화동": [36.3231, 127.4184],
+    "태평동": [36.3092, 127.4139],
+    "유천동": [36.3190, 127.3950],
+    "홍도동": [36.3313, 127.4429],
+    "용운동": [36.3269, 127.4436],
+    "가양동": [36.3419, 127.4390],
+    "판암동": [36.3105, 127.4529],
+    "대동": [36.3336, 127.4348],
+    "삼성동": [36.3388, 127.4327],
+    "신탄진동": [36.4257, 127.4157],
+    "오정동": [36.3684, 127.4341],
+    "법동": [36.3706, 127.4218],
+    "송촌동": [36.3835, 127.4257],
+    "중리동": [36.3697, 127.4295],
+  };
+
+  function haversineKm([lat1, lng1], [lat2, lng2]) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const s = Math.sin(dLat / 2) ** 2 +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(s));
+  }
+
+  function populateDongSelects() {
+    const dongNames = Object.keys(DONG_COORDS);
+    for (const selId of ["venueDong", "myDong"]) {
+      const sel = $(selId);
+      if (!sel) continue;
+      const prevValue = sel.value;
+      sel.innerHTML = dongNames.map(d => `<option value="${d}">${d}</option>`).join("");
+      if (dongNames.includes(prevValue)) sel.value = prevValue;
+    }
+  }
+
+  window.showTab = function (name) {
+    const isRecords = name === "records";
+    $("tabRecords").style.display = isRecords ? "block" : "none";
+    $("tabVenue").style.display = isRecords ? "none" : "block";
+    $("tabBtnRecords").classList.toggle("active", isRecords);
+    $("tabBtnVenue").classList.toggle("active", !isRecords);
+  };
 
   async function loadScores() {
     const { data, error } = await db
@@ -465,35 +845,23 @@
       return;
     }
 
-    renderDashboard(data || []);
+    allRows = data || [];
+    renderDashboard(allRows);
   }
 
-  function renderDashboard(rows) {
-    $("totalGames").textContent = rows.length.toLocaleString();
-
-    if (!rows.length) {
-      $("clubHigh").textContent = "-";
-      $("avgLeader").textContent = "-";
-      $("rankingArea").innerHTML = `<div class="empty">아직 등록된 점수가 없습니다.</div>`;
-      $("recentArea").innerHTML = `<div class="empty">첫 활동 점수를 등록해보세요 🎳</div>`;
-      return;
-    }
-
-    const high = Math.max(...rows.map(r => r.score));
-    $("clubHigh").textContent = high;
-
+  function computeStats(rows) {
     const statMap = new Map();
     for (const r of rows) {
       const key = r.member_id;
       const name = r.bowling_members?.name || "알 수 없음";
       const nickname = r.bowling_members?.nickname || "";
-      if (!statMap.has(key)) statMap.set(key, { name, nickname, scores: [] });
+      if (!statMap.has(key)) statMap.set(key, { memberId: key, name, nickname, scores: [] });
       statMap.get(key).scores.push(r.score);
     }
-
-    const stats = [...statMap.values()].map(s => {
+    return [...statMap.values()].map(s => {
       const total = s.scores.reduce((a,b) => a+b, 0);
       return {
+        memberId: s.memberId,
         name: s.name,
         nickname: s.nickname,
         games: s.scores.length,
@@ -501,10 +869,32 @@
         high: Math.max(...s.scores),
       };
     }).sort((a,b) => b.avg - a.avg);
+  }
 
-    $("avgLeader").innerHTML =
-      `${memberDisplay(stats[0].name, stats[0].nickname)} <span style="font-size:14px;font-weight:700;">${stats[0].avg.toFixed(1)}</span>`;
+  function populateMonthFilter(rows) {
+    const sel = $("rankMonthFilter");
+    const prevValue = sel.value || "all";
+    const months = [...new Set(rows.map(r => (r.played_at || "").slice(0, 7)).filter(Boolean))]
+      .sort((a, b) => b.localeCompare(a));
 
+    sel.innerHTML = `<option value="all">전체</option>` +
+      months.map(m => `<option value="${m}">${m}</option>`).join("");
+
+    sel.value = [...sel.options].some(o => o.value === prevValue) ? prevValue : "all";
+  }
+
+  function renderRankingTable(rows) {
+    const filterVal = $("rankMonthFilter").value || "all";
+    const filtered = filterVal === "all"
+      ? rows
+      : rows.filter(r => (r.played_at || "").slice(0, 7) === filterVal);
+
+    if (!filtered.length) {
+      $("rankingArea").innerHTML = `<div class="empty">해당 기간에 등록된 점수가 없습니다.</div>`;
+      return;
+    }
+
+    const stats = computeStats(filtered);
     const rankTable = document.createElement("table");
     rankTable.innerHTML = `
       <thead><tr>
@@ -525,12 +915,73 @@
     rankTable.appendChild(tb);
     $("rankingArea").innerHTML = "";
     $("rankingArea").appendChild(rankTable);
+  }
 
+  window.onRankMonthChange = function () {
+    renderRankingTable(allRows);
+  };
+
+  function renderMonthlyHighlights(rows) {
+    const now = new Date();
+    const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
+
+    const thisMonthRows = rows.filter(r => (r.played_at || "").slice(0, 7) === thisMonth);
+    const prevMonthRows = rows.filter(r => (r.played_at || "").slice(0, 7) === prevMonth);
+
+    if (!thisMonthRows.length) {
+      const emptyMsg = `<span style="font-size:13px;color:#8a908a;">이달 기록 없음</span>`;
+      $("monthAvgLeader").innerHTML = emptyMsg;
+      $("monthGamesLeader").innerHTML = emptyMsg;
+      $("monthImproveLeader").innerHTML = emptyMsg;
+      return;
+    }
+
+    const thisStats = computeStats(thisMonthRows);
+
+    $("monthAvgLeader").innerHTML =
+      `${memberDisplay(thisStats[0].name, thisStats[0].nickname)}<div class="sub">AVG ${thisStats[0].avg.toFixed(1)}</div>`;
+
+    const gamesLeader = [...thisStats].sort((a, b) => b.games - a.games)[0];
+    $("monthGamesLeader").innerHTML =
+      `${memberDisplay(gamesLeader.name, gamesLeader.nickname)}<div class="sub">${gamesLeader.games}게임</div>`;
+
+    if (!prevMonthRows.length) {
+      $("monthImproveLeader").innerHTML = `<span style="font-size:13px;color:#8a908a;">비교할 지난달 기록 없음</span>`;
+      return;
+    }
+
+    const prevStats = computeStats(prevMonthRows);
+    const prevMap = new Map(prevStats.map(s => [s.memberId, s.avg]));
+
+    let best = null;
+    for (const s of thisStats) {
+      if (!prevMap.has(s.memberId)) continue;
+      const prevAvg = prevMap.get(s.memberId);
+      if (prevAvg <= 0) continue;
+      const rate = ((s.avg - prevAvg) / prevAvg) * 100;
+      if (!best || rate > best.rate) {
+        best = { name: s.name, nickname: s.nickname, rate };
+      }
+    }
+
+    if (!best) {
+      $("monthImproveLeader").innerHTML = `<span style="font-size:13px;color:#8a908a;">비교 가능한 기록 없음</span>`;
+    } else {
+      const sign = best.rate >= 0 ? "+" : "";
+      $("monthImproveLeader").innerHTML =
+        `${memberDisplay(best.name, best.nickname)}<div class="sub">${sign}${best.rate.toFixed(1)}%</div>`;
+    }
+  }
+
+  function renderRecentTable(rows) {
     const recent = rows.slice(0, 20);
+    const canDeleteAny = isAdminUser || !!myMemberId;
     const recentTable = document.createElement("table");
     recentTable.innerHTML = `
       <thead><tr>
-        <th>날짜 / 회원</th><th>점수</th><th class="adminCol" style="display:none;">관리</th>
+        <th>날짜 / 회원</th><th>점수</th>${canDeleteAny ? "<th>관리</th>" : ""}
       </tr></thead>
     `;
     const rb = document.createElement("tbody");
@@ -538,21 +989,88 @@
       const tr = document.createElement("tr");
       const name = r.bowling_members?.name || "알 수 없음";
       const nickname = r.bowling_members?.nickname || "";
+      const canDeleteThis = isAdminUser || (myMemberId && r.member_id === myMemberId);
       tr.innerHTML = `
         <td>${escapeHtml(r.played_at)} · ${memberDisplay(name, nickname)}</td>
         <td><b>${r.score}</b></td>
-        <td class="adminCol" style="display:none;">
-          <button class="danger" data-id="${r.id}">삭제</button>
-        </td>
+        ${canDeleteAny ? `<td>${canDeleteThis ? `<button class="danger" data-id="${r.id}">삭제</button>` : ""}</td>` : ""}
       `;
-      tr.querySelector(".danger").addEventListener("click", () => deleteScore(r.id));
+      if (canDeleteThis) {
+        tr.querySelector(".danger").addEventListener("click", () => deleteScore(r.id));
+      }
       rb.appendChild(tr);
     });
     recentTable.appendChild(rb);
     $("recentArea").innerHTML = "";
     $("recentArea").appendChild(recentTable);
+  }
 
-    refreshAdminColumns();
+  function csvEscape(v) {
+    const s = String(v ?? "");
+    if (/[",\n\r]/.test(s)) {
+      return '"' + s.replaceAll('"', '""') + '"';
+    }
+    return s;
+  }
+
+  window.exportExcel = function () {
+    const filterVal = $("rankMonthFilter").value || "all";
+    const rows = filterVal === "all"
+      ? allRows
+      : allRows.filter(r => (r.played_at || "").slice(0, 7) === filterVal);
+
+    if (!rows.length) {
+      setStatus("내보낼 기록이 없습니다.");
+      return;
+    }
+
+    const header = ["날짜", "회원(별명)", "회원(실명)", "점수"];
+    const lines = [header.join(",")];
+    for (const r of rows) {
+      const name = r.bowling_members?.name || "";
+      const nickname = r.bowling_members?.nickname || "";
+      lines.push([r.played_at, nickname, name, r.score].map(csvEscape).join(","));
+    }
+
+    const csvContent = "﻿" + lines.join("\r\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const suffix = filterVal === "all" ? "전체" : filterVal;
+    a.href = url;
+    a.download = `데굴데굴_볼링기록_${suffix}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  function renderDashboard(rows) {
+    $("totalGames").textContent = rows.length.toLocaleString();
+
+    if (!rows.length) {
+      $("clubHigh").textContent = "-";
+      $("avgLeader").textContent = "-";
+      $("monthAvgLeader").textContent = "-";
+      $("monthImproveLeader").textContent = "-";
+      $("monthGamesLeader").textContent = "-";
+      $("rankingArea").innerHTML = `<div class="empty">아직 등록된 점수가 없습니다.</div>`;
+      $("recentArea").innerHTML = `<div class="empty">첫 활동 점수를 등록해보세요 🎳</div>`;
+      populateMonthFilter(rows);
+      return;
+    }
+
+    const high = Math.max(...rows.map(r => r.score));
+    $("clubHigh").textContent = high;
+
+    const overallStats = computeStats(rows);
+    $("avgLeader").innerHTML =
+      `${memberDisplay(overallStats[0].name, overallStats[0].nickname)} <span style="font-size:14px;font-weight:700;">${overallStats[0].avg.toFixed(1)}</span>`;
+
+    populateMonthFilter(rows);
+    renderRankingTable(rows);
+    renderMonthlyHighlights(rows);
+    renderRecentTable(rows);
   }
 
   function escapeHtml(v) {
@@ -593,15 +1111,492 @@
       await ensureMemberRecord();
       await loadMembers();
     }
-    refreshAdminColumns();
+    await refreshPermissions();
+    if (allRows.length) renderDashboard(allRows);
+    updateCommentWriteUi();
+    if (allComments.length) renderComments(allComments);
+    updateVenueMeetupUi();
+    if (allVenues.length) renderVenues();
+    if (currentMeetupId) renderAttendees();
+    renderVenueRecommendation();
   }
 
-  function refreshAdminColumns() {
-    isAdmin().then((admin) => {
-      document.querySelectorAll(".adminCol").forEach(el => {
-        el.style.display = admin ? "table-cell" : "none";
+  async function refreshPermissions() {
+    isAdminUser = await isAdmin();
+
+    const {
+      data: { user }
+    } = await db.auth.getUser();
+
+    if (!user) {
+      myMemberId = null;
+      currentUserId = null;
+      return;
+    }
+
+    currentUserId = user.id;
+
+    const { data } = await db
+      .from("bowling_members")
+      .select("id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    myMemberId = data?.id || null;
+  }
+
+  function updateCommentWriteUi() {
+    const loggedIn = !!currentUserId;
+    $("commentWriteBox").style.display = loggedIn ? "block" : "none";
+    $("commentLoginNotice").style.display = loggedIn ? "none" : "block";
+  }
+
+  async function loadComments() {
+    const { data, error } = await db
+      .from("bowling_comments")
+      .select("id,content,created_at,member_id,user_id,bowling_members(name,nickname)")
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (error) {
+      $("commentList").innerHTML = `<div class="empty">방명록을 불러오지 못했습니다.</div>`;
+      return;
+    }
+
+    allComments = data || [];
+    renderComments(allComments);
+  }
+
+  function renderComments(rows) {
+    if (!rows.length) {
+      $("commentList").innerHTML = `<div class="empty">첫 댓글을 남겨보세요!</div>`;
+      return;
+    }
+
+    const list = document.createElement("div");
+    rows.forEach(c => {
+      const item = document.createElement("div");
+      item.className = "comment-item";
+      const name = c.bowling_members?.name || "";
+      const nickname = c.bowling_members?.nickname || "익명";
+      const canDelete = isAdminUser || (currentUserId && c.user_id === currentUserId);
+      const time = new Date(c.created_at).toLocaleString("ko-KR", {
+        month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit"
       });
+      item.innerHTML = `
+        <div class="meta">
+          <span>${memberDisplay(name, nickname)} · ${time}</span>
+          ${canDelete ? `<button class="danger" data-id="${c.id}">삭제</button>` : ""}
+        </div>
+        <div class="content">${escapeHtml(c.content)}</div>
+      `;
+      if (canDelete) {
+        item.querySelector(".danger").addEventListener("click", () => deleteComment(c.id));
+      }
+      list.appendChild(item);
     });
+    $("commentList").innerHTML = "";
+    $("commentList").appendChild(list);
+  }
+
+  window.addComment = async function () {
+    const content = $("commentInput").value.trim();
+    if (!content) return setStatus("댓글 내용을 입력하세요.");
+    if (content.length > 500) return setStatus("댓글은 500자 이내로 작성해주세요.");
+    if (!currentUserId) return setStatus("로그인이 필요합니다.");
+
+    const { error } = await db.from("bowling_comments").insert({
+      content,
+      user_id: currentUserId,
+      member_id: myMemberId,
+    });
+
+    if (error) return setStatus("댓글 등록 실패: " + error.message);
+
+    $("commentInput").value = "";
+    setStatus("댓글을 등록했습니다.");
+    await loadComments();
+  };
+
+  async function deleteComment(id) {
+    if (!confirm("이 댓글을 삭제할까요?")) return;
+    const { error } = await db.from("bowling_comments").delete().eq("id", id);
+    if (error) return setStatus("삭제 실패: " + error.message);
+    setStatus("댓글을 삭제했습니다.");
+    await loadComments();
+  }
+
+  // ==================== 모임장소 추천 ====================
+
+  function updateVenueMeetupUi() {
+    const loggedIn = !!currentUserId;
+    $("venueWriteBox").style.display = loggedIn ? "block" : "none";
+    $("venueLoginNotice").style.display = loggedIn ? "none" : "block";
+    $("meetupWriteBox").style.display = loggedIn ? "block" : "none";
+    $("meetupLoginNotice").style.display = loggedIn ? "none" : "block";
+    $("myLocationBox").style.display = loggedIn ? "block" : "none";
+    $("myLocationLoginNotice").style.display = loggedIn ? "none" : "block";
+    if (loggedIn) fillMyLocationForm();
+  }
+
+  function fillMyLocationForm() {
+    const me = allMembers.find(m => m.id === myMemberId);
+    if (!me) return;
+    if (me.dong && DONG_COORDS[me.dong]) $("myDong").value = me.dong;
+    $("myHasCar").checked = !!me.has_car;
+  }
+
+  window.saveMyLocation = async function () {
+    if (!myMemberId) return setStatus("회원 정보를 찾을 수 없습니다. 다시 로그인해보세요.");
+    const dong = $("myDong").value;
+    const hasCar = $("myHasCar").checked;
+
+    const { error } = await db
+      .from("bowling_members")
+      .update({ dong, has_car: hasCar })
+      .eq("id", myMemberId);
+
+    if (error) return setStatus("저장 실패: " + error.message);
+    setStatus("내 위치 정보를 저장했습니다.");
+    await loadMembers();
+    if (currentMeetupId) await loadAttendees(currentMeetupId);
+  };
+
+  async function loadVenues() {
+    const { data, error } = await db
+      .from("bowling_venues")
+      .select("id,name,dong,address,price_info,review,created_by,created_at")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      $("venueArea").innerHTML = `<div class="empty">볼링장 목록을 불러오지 못했습니다.</div>`;
+      return;
+    }
+
+    allVenues = data || [];
+    renderVenues();
+  }
+
+  function renderVenues() {
+    if (!allVenues.length) {
+      $("venueArea").innerHTML = `<div class="empty">등록된 볼링장이 없습니다. 먼저 등록해보세요!</div>`;
+      return;
+    }
+
+    const wrap = document.createElement("div");
+    allVenues.forEach(v => {
+      const canDelete = isAdminUser || (currentUserId && v.created_by === currentUserId);
+      const card = document.createElement("div");
+      card.className = "venue-card";
+      card.innerHTML = `
+        <div class="vname">${escapeHtml(v.name)}</div>
+        <div class="vmeta">📍 ${escapeHtml(v.dong)}${v.address ? " · " + escapeHtml(v.address) : ""}${v.price_info ? " · 💰 " + escapeHtml(v.price_info) : ""}</div>
+        ${v.review ? `<div class="vreview">${escapeHtml(v.review)}</div>` : ""}
+        ${canDelete ? `<button class="danger" data-id="${v.id}" style="margin-top:8px;">삭제</button>` : ""}
+      `;
+      if (canDelete) {
+        card.querySelector(".danger").addEventListener("click", () => deleteVenue(v.id));
+      }
+      wrap.appendChild(card);
+    });
+    $("venueArea").innerHTML = "";
+    $("venueArea").appendChild(wrap);
+  }
+
+  window.addVenue = async function () {
+    const name = $("venueName").value.trim();
+    const dong = $("venueDong").value;
+    const address = $("venueAddress").value.trim();
+    const priceInfo = $("venuePrice").value.trim();
+    const review = $("venueReview").value.trim();
+
+    if (!name) return setStatus("볼링장 이름을 입력하세요.");
+    if (!currentUserId) return setStatus("로그인이 필요합니다.");
+
+    const { error } = await db.from("bowling_venues").insert({
+      name, dong,
+      address: address || null,
+      price_info: priceInfo || null,
+      review: review || null,
+      created_by: currentUserId,
+    });
+
+    if (error) return setStatus("볼링장 등록 실패: " + error.message);
+
+    $("venueName").value = "";
+    $("venueAddress").value = "";
+    $("venuePrice").value = "";
+    $("venueReview").value = "";
+    setStatus("볼링장을 등록했습니다.");
+    await loadVenues();
+    renderVenueRecommendation();
+  };
+
+  async function deleteVenue(id) {
+    if (!confirm("이 볼링장을 삭제할까요?")) return;
+    const { error } = await db.from("bowling_venues").delete().eq("id", id);
+    if (error) return setStatus("삭제 실패: " + error.message);
+    setStatus("볼링장을 삭제했습니다.");
+    await loadVenues();
+    renderVenueRecommendation();
+  }
+
+  async function loadMeetups() {
+    const { data, error } = await db
+      .from("bowling_meetups")
+      .select("id,meetup_date,note,created_by")
+      .order("meetup_date", { ascending: false });
+
+    if (error) return;
+
+    allMeetups = data || [];
+    const sel = $("meetupSelect");
+    const prevValue = sel.value;
+    sel.innerHTML = allMeetups.map(m =>
+      `<option value="${m.id}">${m.meetup_date}${m.note ? " · " + escapeHtml(m.note) : ""}</option>`
+    ).join("");
+
+    if (!allMeetups.length) {
+      $("attendeeArea").innerHTML = `<div class="empty">모임을 먼저 만들어주세요.</div>`;
+      $("venueRecommendArea").innerHTML = `<div class="empty">참석자를 체크하면 추천 결과가 표시됩니다.</div>`;
+      currentMeetupId = null;
+      return;
+    }
+
+    const stillExists = allMeetups.some(m => m.id === prevValue);
+    currentMeetupId = stillExists ? prevValue : allMeetups[0].id;
+    sel.value = currentMeetupId;
+    await loadAttendees(currentMeetupId);
+  }
+
+  window.onMeetupChange = async function () {
+    currentMeetupId = $("meetupSelect").value;
+    await loadAttendees(currentMeetupId);
+  };
+
+  window.addMeetup = async function () {
+    const meetupDate = $("meetupDate").value;
+    const note = $("meetupNote").value.trim();
+    if (!meetupDate) return setStatus("모임 날짜를 선택하세요.");
+    if (!currentUserId) return setStatus("로그인이 필요합니다.");
+
+    const { error } = await db.from("bowling_meetups").insert({
+      meetup_date: meetupDate,
+      note: note || null,
+      created_by: currentUserId,
+    });
+
+    if (error) return setStatus("모임 생성 실패: " + error.message);
+
+    $("meetupNote").value = "";
+    setStatus("모임을 만들었습니다.");
+    await loadMeetups();
+  };
+
+  async function loadAttendees(meetupId) {
+    if (!meetupId) return;
+    const { data, error } = await db
+      .from("bowling_meetup_attendees")
+      .select("member_id")
+      .eq("meetup_id", meetupId);
+
+    currentAttendeeMemberIds = error ? [] : (data || []).map(r => r.member_id);
+    renderAttendees();
+    renderVenueRecommendation();
+  }
+
+  function renderAttendees() {
+    if (!allMembers.length) {
+      $("attendeeArea").innerHTML = `<div class="empty">등록된 회원이 없습니다.</div>`;
+      return;
+    }
+
+    const list = document.createElement("div");
+    list.className = "attendee-list";
+    allMembers.forEach(m => {
+      const checked = currentAttendeeMemberIds.includes(m.id);
+      const chip = document.createElement("div");
+      chip.className = "attendee-chip" + (checked ? " checked" : "");
+      chip.textContent = (m.nickname || m.name) + (m.has_car ? " 🚗" : "");
+      chip.addEventListener("click", () => toggleAttendance(m.id));
+      list.appendChild(chip);
+    });
+    $("attendeeArea").innerHTML = "";
+    $("attendeeArea").appendChild(list);
+  }
+
+  async function toggleAttendance(memberId) {
+    if (!currentMeetupId) return setStatus("모임을 먼저 선택하세요.");
+    if (!currentUserId) return setStatus("로그인이 필요합니다.");
+    if (memberId !== myMemberId && !isAdminUser) {
+      return setStatus("본인 참석 여부만 체크할 수 있습니다.");
+    }
+
+    const isChecked = currentAttendeeMemberIds.includes(memberId);
+    if (isChecked) {
+      const { error } = await db
+        .from("bowling_meetup_attendees")
+        .delete()
+        .eq("meetup_id", currentMeetupId)
+        .eq("member_id", memberId);
+      if (error) return setStatus("참석 취소 실패: " + error.message);
+    } else {
+      const { error } = await db
+        .from("bowling_meetup_attendees")
+        .insert({ meetup_id: currentMeetupId, member_id: memberId });
+      if (error) return setStatus("참석 등록 실패: " + error.message);
+    }
+
+    await loadAttendees(currentMeetupId);
+  }
+
+  function renderVenueRecommendation() {
+    if (!currentMeetupId || !currentAttendeeMemberIds.length) {
+      $("venueRecommendArea").innerHTML = `<div class="empty">참석자를 체크하면 추천 결과가 표시됩니다.</div>`;
+      return;
+    }
+
+    if (!allVenues.length) {
+      $("venueRecommendArea").innerHTML = `<div class="empty">등록된 볼링장이 없습니다.</div>`;
+      return;
+    }
+
+    const attendees = allMembers.filter(m => currentAttendeeMemberIds.includes(m.id));
+    const noCarCount = attendees.filter(m => !m.has_car).length;
+
+    // 자차 없는 회원의 거리를 더 우선적으로 고려하기 위한 가중치.
+    // 값이 클수록 "자차 없는 회원과 가까운 곳"을 더 강하게 우선함. 필요하면 숫자만 조정하면 됨.
+    const NO_CAR_WEIGHT = 2;
+    const CAR_WEIGHT = 1;
+
+    const weighted = attendees
+      .filter(m => m.dong && DONG_COORDS[m.dong])
+      .map(m => ({ coord: DONG_COORDS[m.dong], weight: m.has_car ? CAR_WEIGHT : NO_CAR_WEIGHT }));
+
+    const ranked = allVenues.map(v => {
+      const vCoord = DONG_COORDS[v.dong];
+      if (!vCoord || !weighted.length) return { ...v, avgDist: null, weightedAvgDist: null };
+      const dists = weighted.map(w => haversineKm(w.coord, vCoord));
+      const avgDist = dists.reduce((a, b) => a + b, 0) / dists.length;
+      const totalWeight = weighted.reduce((a, w) => a + w.weight, 0);
+      const weightedSum = weighted.reduce((a, w, i) => a + dists[i] * w.weight, 0);
+      return { ...v, avgDist, weightedAvgDist: weightedSum / totalWeight };
+    }).sort((a, b) => {
+      if (a.weightedAvgDist == null) return 1;
+      if (b.weightedAvgDist == null) return -1;
+      return a.weightedAvgDist - b.weightedAvgDist;
+    });
+
+    const medals = ["🥇", "🥈", "🥉"];
+    const rows = ranked.slice(0, 3).map((v, i) => `
+      <div style="margin-bottom:8px;">
+        <div>${medals[i]} <b>${escapeHtml(v.name)}</b> (${escapeHtml(v.dong)})</div>
+        <div class="sub">${v.weightedAvgDist != null
+          ? `가중 평균 ${v.weightedAvgDist.toFixed(1)}km (단순 평균 ${v.avgDist.toFixed(1)}km)`
+          : "거리 계산 불가 (동 정보 확인 필요)"}</div>
+      </div>
+    `).join("");
+
+    const unknownCount = attendees.length - weighted.length;
+    const carNote = `<div class="sub" style="margin-top:6px;">🚗 자차 없는 참석자: ${noCarCount}명 / 총 ${attendees.length}명${unknownCount ? ` · 동 정보 미입력 ${unknownCount}명` : ""} (자차 없는 회원 거리 ${NO_CAR_WEIGHT}배 가중)</div>`;
+
+    $("venueRecommendArea").innerHTML = rows + carNote;
+  }
+
+  function shuffleArray(arr) {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  function makeRandomTeams(players, teamCount) {
+    const shuffled = shuffleArray(players);
+    const teams = Array.from({ length: teamCount }, () => ({ members: [], total: 0 }));
+    shuffled.forEach((p, i) => {
+      const t = teams[i % teamCount];
+      t.members.push(p);
+      t.total += p.avg;
+    });
+    return teams;
+  }
+
+  function makeBalancedTeams(players, teamCount, teamSize) {
+    const sorted = [...players].sort((a, b) => b.avg - a.avg);
+    const teams = Array.from({ length: teamCount }, () => ({ members: [], total: 0 }));
+    for (const p of sorted) {
+      let target = null;
+      for (const t of teams) {
+        if (t.members.length >= teamSize) continue;
+        if (!target || t.total < target.total) target = t;
+      }
+      target.members.push(p);
+      target.total += p.avg;
+    }
+    return teams;
+  }
+
+  window.generateTeams = function () {
+    if (!currentMeetupId || !currentAttendeeMemberIds.length) {
+      $("teamArea").innerHTML = `<div class="empty">참석 체크된 인원이 없습니다.</div>`;
+      return;
+    }
+
+    const attendees = allMembers.filter(m => currentAttendeeMemberIds.includes(m.id));
+    const stats = computeStats(allRows);
+    const statMap = new Map(stats.map(s => [s.memberId, s.avg]));
+    const fallbackAvg = stats.length
+      ? stats.reduce((a, s) => a + s.avg, 0) / stats.length
+      : 150;
+
+    const players = attendees.map(m => ({
+      id: m.id,
+      name: m.name,
+      nickname: m.nickname,
+      avg: statMap.has(m.id) ? statMap.get(m.id) : fallbackAvg,
+      hasRecord: statMap.has(m.id),
+    }));
+
+    const sizeSel = $("teamSizeSelect").value;
+    const teamSize = sizeSel === "auto"
+      ? (players.length <= 6 ? 2 : 3)
+      : parseInt(sizeSel, 10);
+
+    const mode = $("teamModeSelect").value;
+    const teamCount = Math.max(1, Math.ceil(players.length / teamSize));
+
+    const teams = mode === "random"
+      ? makeRandomTeams(players, teamCount)
+      : makeBalancedTeams(players, teamCount, teamSize);
+
+    renderTeams(teams, mode, teamSize);
+  };
+
+  function renderTeams(teams, mode, teamSize) {
+    const noRecordCount = teams.reduce((a, t) => a + t.members.filter(p => !p.hasRecord).length, 0);
+    const cards = teams.map((t, i) => {
+      const avg = t.members.length ? t.total / t.members.length : 0;
+      const names = t.members
+        .map(p => memberDisplay(p.name, p.nickname) + (p.hasRecord ? "" : ` <span class="sub">(기록없음)</span>`))
+        .join(", ");
+      return `
+        <div class="venue-card">
+          <div class="vname">${i + 1}팀 (${t.members.length}명)</div>
+          <div class="vmeta">${names}</div>
+          ${mode === "balanced" ? `<div class="vmeta">팀 평균: ${avg.toFixed(1)}점</div>` : ""}
+        </div>
+      `;
+    }).join("");
+
+    const modeNote = mode === "balanced"
+      ? `팀당 ${teamSize}명 기준 · 기존 점수 기록으로 팀 평균을 맞췄어요.`
+      : `팀당 ${teamSize}명 기준 · 완전 랜덤으로 구성했어요.`;
+    const recordNote = noRecordCount ? ` (점수 기록 없는 회원 ${noRecordCount}명은 전체 평균으로 계산)` : "";
+
+    $("teamArea").innerHTML =
+      `<div class="note" style="margin-bottom:10px;">${modeNote}${recordNote}</div>` + cards;
   }
 
   window.addScores = async function () {
@@ -643,9 +1638,15 @@
 
   db.auth.onAuthStateChange(() => refreshAuthUi());
 
+  populateDongSelects();
+  $("meetupDate").value = todayLocal();
+
   await loadMembers();
   await refreshAuthUi();
   await loadScores();
+  await loadComments();
+  await loadVenues();
+  await loadMeetups();
 </script>
 </body>
 </html>
