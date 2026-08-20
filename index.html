@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>데굴데굴 볼링 기록실</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -268,6 +270,12 @@
       border-color: #2f7d3c;
       color: #fff;
     }
+    .venue-map {
+      height: 320px;
+      border-radius: 10px;
+      margin-bottom: 12px;
+      z-index: 0;
+    }
     .venue-card {
       border: 1px solid #e5e8e5;
       border-radius: 10px;
@@ -478,6 +486,7 @@
       <div class="main-col">
         <div class="section">
           <h2>🎳 볼링장 후보</h2>
+          <div id="venueMap" class="venue-map"></div>
           <div id="venueArea"><div class="empty">불러오는 중...</div></div>
 
           <div id="venueWriteBox" style="display:none;margin-top:14px;">
@@ -498,23 +507,9 @@
         </div>
 
         <div class="section">
-          <h2>🗓 모임 만들기 &amp; 참석 체크</h2>
-
-          <div id="meetupWriteBox" style="display:none;">
-            <div class="form-grid">
-              <input type="date" id="meetupDate">
-              <input type="text" id="meetupNote" placeholder="모임 설명 (선택)">
-            </div>
-            <button class="primary" onclick="addMeetup()">모임 만들기</button>
-          </div>
-          <div id="meetupLoginNotice" class="note" style="display:none;">로그인 후 모임을 만들 수 있어요.</div>
-
-          <div class="rank-controls" style="margin-top:14px;">
-            <label>모임 선택</label>
-            <select id="meetupSelect" onchange="onMeetupChange()"></select>
-          </div>
-
-          <div id="attendeeArea"><div class="empty">모임을 먼저 만들어주세요.</div></div>
+          <h2>🙋 참석자 선택</h2>
+          <div class="note" style="margin-bottom:10px;">오늘 참석하는 회원을 클릭해서 선택하세요. (별도로 저장되지 않고, 이 화면에서만 사용돼요)</div>
+          <div id="attendeeArea"><div class="empty">회원 목록을 불러오는 중...</div></div>
         </div>
 
         <div class="section">
@@ -534,7 +529,7 @@
             </select>
             <button class="primary" onclick="generateTeams()">팀 구성하기</button>
           </div>
-          <div id="teamArea"><div class="empty">모임 참석자를 체크한 뒤 팀을 구성해보세요.</div></div>
+          <div id="teamArea"><div class="empty">참석자를 선택한 뒤 팀을 구성해보세요.</div></div>
         </div>
       </div>
 
@@ -545,9 +540,13 @@
         </div>
 
         <div class="section side-card">
-          <div class="label">🙋 내 위치 정보</div>
+          <div class="label">🙋 회원 위치 정보</div>
           <div id="myLocationBox" style="display:none;">
+            <div class="note" style="margin-bottom:8px;">회원을 선택해서 동/자차 정보를 등록·수정할 수 있어요.</div>
             <div class="form-grid" style="grid-template-columns:1fr;">
+              <select id="myLocationMemberSelect" onchange="onMyLocationMemberChange()"></select>
+            </div>
+            <div class="form-grid" style="grid-template-columns:1fr;margin-top:10px;">
               <input type="text" id="myDong" list="dongDatalist" placeholder="동 이름 (예: 둔산동)">
             </div>
             <div class="note" style="margin-top:4px;">목록에 없는 동이면 직접 입력해도 됩니다.</div>
@@ -556,7 +555,7 @@
             </label>
             <button class="primary" onclick="saveMyLocation()">저장</button>
           </div>
-          <div id="myLocationLoginNotice" class="note" style="display:none;">로그인 후 내 동/자차 정보를 등록할 수 있어요.</div>
+          <div id="myLocationLoginNotice" class="note" style="display:none;">로그인 후 회원 동/자차 정보를 등록할 수 있어요.</div>
         </div>
       </div>
     </div>
@@ -764,46 +763,246 @@
   let allComments = [];
   let allMembers = [];
   let allVenues = [];
-  let allMeetups = [];
-  let currentMeetupId = null;
-  let currentAttendeeMemberIds = [];
+  let selectedAttendeeIds = new Set();
+  let venueMap = null;
+  let venueMarkers = [];
 
-  // 대전 주요 동(洞) 대략적 중심 좌표 (거리 "상대 비교"용 근사치이며,
-  // 정밀 지오코딩이 아닙니다. 필요하면 아래 값을 직접 수정/추가하세요.
+  // 대전 5개구 동(洞) 대략적 중심 좌표 (거리 "상대 비교"용 근사치이며 정밀 지오코딩이 아님)
+  // - 대전 나무위키 문서(업로드된 HTML)에서 실제 존재/존재했던 동 이름을 모두 추출해 반영
+  // - 잘 알려진 동은 비교적 정확한 좌표, 잘 모르는/외곽 동은 소속 구(區)의 대략적 중심 좌표로 대체
+  // - 필요하면 아래 값을 직접 수정/추가하면 됨
   const DONG_COORDS = {
-    "둔산동": [36.3504, 127.3845],
+    "가수원동": [36.302, 127.37],
+    "가양1동": [36.3419, 127.439],
+    "가양2동": [36.3419, 127.439],
+    "가양동": [36.3419, 127.439],
+    "가오동": [36.33, 127.455],
+    "가장동": [36.345, 127.38],
+    "가정동": [36.345, 127.38],
+    "갈마1동": [36.3399, 127.3714],
+    "갈마2동": [36.3399, 127.3714],
     "갈마동": [36.3399, 127.3714],
-    "월평동": [36.3608, 127.3676],
+    "갈전동": [36.345, 127.38],
+    "갑동": [36.362, 127.345],
+    "개동": [36.345, 127.38],
+    "계산동": [36.345, 127.38],
+    "관저1동": [36.3016, 127.3536],
+    "관저2동": [36.3016, 127.3536],
     "관저동": [36.3016, 127.3536],
-    "탄방동": [36.3444, 127.3925],
-    "정림동": [36.2977, 127.3789],
-    "가수원동": [36.3020, 127.3700],
-    "도마동": [36.3180, 127.3970],
-    "궁동": [36.3625, 127.3444],
-    "어은동": [36.3646, 127.3560],
-    "봉명동": [36.3599, 127.3418],
-    "노은동": [36.3789, 127.3167],
-    "지족동": [36.3908, 127.3212],
-    "전민동": [36.4013, 127.3459],
-    "도룡동": [36.3838, 127.3690],
     "관평동": [36.4241, 127.3958],
-    "대흥동": [36.3260, 127.4258],
-    "은행동": [36.3253, 127.4212],
-    "문화동": [36.3138, 127.4165],
-    "선화동": [36.3231, 127.4184],
-    "태평동": [36.3092, 127.4139],
-    "유천동": [36.3190, 127.3950],
-    "홍도동": [36.3313, 127.4429],
-    "용운동": [36.3269, 127.4436],
-    "가양동": [36.3419, 127.4390],
-    "판암동": [36.3105, 127.4529],
+    "괴곡동": [36.362, 127.345],
+    "괴정동": [36.3355, 127.379],
+    "교촌동": [36.362, 127.345],
+    "구도동": [36.362, 127.345],
+    "구룡동": [36.362, 127.345],
+    "구성동": [36.366, 127.339],
+    "구암동": [36.38, 127.351],
+    "구완동": [36.362, 127.345],
+    "구즉동": [36.431, 127.362],
+    "궁동": [36.3625, 127.3444],
+    "금고동": [36.362, 127.345],
+    "금동": [36.362, 127.345],
+    "금탄동": [36.362, 127.345],
+    "기성동": [36.345, 127.38],
+    "낭월동": [36.33, 127.455],
+    "내동": [36.345, 127.38],
+    "내탑동": [36.33, 127.455],
+    "노은1동": [36.3789, 127.3167],
+    "노은2동": [36.3789, 127.3167],
+    "노은3동": [36.3789, 127.3167],
+    "노은동": [36.3789, 127.3167],
+    "대1동": [36.3336, 127.4348],
+    "대2동": [36.3336, 127.4348],
     "대동": [36.3336, 127.4348],
-    "삼성동": [36.3388, 127.4327],
-    "신탄진동": [36.4257, 127.4157],
-    "오정동": [36.3684, 127.4341],
+    "대별동": [36.33, 127.455],
+    "대사동": [36.323, 127.427],
+    "대성동": [36.33, 127.455],
+    "대신동": [36.33, 127.455],
+    "대청동": [36.33, 127.455],
+    "대화동": [36.376, 127.401],
+    "대흥1동": [36.326, 127.4258],
+    "대흥2동": [36.326, 127.4258],
+    "대흥3동": [36.326, 127.4258],
+    "대흥동": [36.326, 127.4258],
+    "덕명동": [36.317, 127.33],
+    "덕암동": [36.395, 127.425],
+    "덕진동": [36.362, 127.345],
+    "도룡동": [36.3838, 127.369],
+    "도마1동": [36.318, 127.397],
+    "도마2동": [36.318, 127.397],
+    "도마동": [36.318, 127.397],
+    "도안동": [36.345, 127.38],
+    "둔곡동": [36.4, 127.4],
+    "둔산1동": [36.3504, 127.3845],
+    "둔산2동": [36.3504, 127.3845],
+    "둔산3동": [36.3504, 127.3845],
+    "둔산동": [36.3504, 127.3845],
+    "마산동": [36.33, 127.455],
+    "만년동": [36.345, 127.38],
+    "매노동": [36.345, 127.38],
+    "목달동": [36.345, 127.38],
+    "목동": [36.3235, 127.4145],
+    "목상동": [36.447, 127.413],
+    "무수동": [36.345, 127.38],
+    "문지동": [36.362, 127.345],
+    "문창1동": [36.316, 127.421],
+    "문창2동": [36.316, 127.421],
+    "문창동": [36.316, 127.421],
+    "문평동": [36.438, 127.426],
+    "문화1동": [36.3138, 127.4165],
+    "문화2동": [36.3138, 127.4165],
+    "문화동": [36.3138, 127.4165],
+    "미호동": [36.447, 127.394],
+    "반석동": [36.399, 127.3115],
+    "방동": [36.335, 127.302],
+    "방현동": [36.362, 127.345],
+    "법1동": [36.3706, 127.4218],
+    "법2동": [36.3706, 127.4218],
     "법동": [36.3706, 127.4218],
+    "변동": [36.345, 127.38],
+    "복수동": [36.345, 127.38],
+    "복용동": [36.362, 127.345],
+    "봉곡동": [36.345, 127.38],
+    "봉명동": [36.3599, 127.3418],
+    "봉산동": [36.345, 127.38],
+    "부사동": [36.3245, 127.429],
+    "부수동": [36.395, 127.425],
+    "비래동": [36.38, 127.437],
+    "비룡동": [36.395, 127.425],
+    "사성동": [36.362, 127.345],
+    "사정동": [36.362, 127.345],
+    "산내동": [36.33, 127.455],
+    "산서동": [36.32, 127.41],
+    "산성동": [36.296, 127.396],
+    "산직동": [36.345, 127.38],
+    "삼괴동": [36.33, 127.455],
+    "삼성1동": [36.3388, 127.4327],
+    "삼성2동": [36.3388, 127.4327],
+    "삼성동": [36.3388, 127.4327],
+    "삼정동": [36.33, 127.455],
+    "삼천동": [36.345, 127.38],
+    "상대동": [36.335, 127.345],
+    "상서동": [36.345, 127.38],
+    "상소동": [36.33, 127.455],
+    "석교동": [36.32, 127.41],
+    "석봉동": [36.44, 127.418],
+    "선화1동": [36.3231, 127.4184],
+    "선화2동": [36.3231, 127.4184],
+    "선화3동": [36.3231, 127.4184],
+    "선화동": [36.3231, 127.4184],
+    "성남1동": [36.328, 127.44],
+    "성남2동": [36.328, 127.44],
+    "성남동": [36.328, 127.44],
+    "성북동": [36.362, 127.345],
+    "세동": [36.362, 127.345],
+    "세천동": [36.33, 127.455],
+    "소제동": [36.335, 127.437],
+    "소호동": [36.362, 127.345],
+    "송강동": [36.397, 127.328],
+    "송정동": [36.395, 127.425],
     "송촌동": [36.3835, 127.4257],
+    "수남동": [36.362, 127.345],
+    "신대동": [36.391, 127.433],
+    "신동": [36.395, 127.395],
+    "신봉동": [36.345, 127.32],
+    "신상동": [36.33, 127.455],
+    "신성동": [36.3746, 127.369],
+    "신안동": [36.322, 127.43],
+    "신인동": [36.33, 127.455],
+    "신일동": [36.383, 127.437],
+    "신탄진동": [36.4257, 127.4157],
+    "신하동": [36.33, 127.455],
+    "신흥동": [36.33, 127.455],
+    "안산동": [36.39, 127.338],
+    "안영동": [36.292, 127.381],
+    "어남동": [36.362, 127.345],
+    "어은동": [36.3646, 127.356],
+    "연축동": [36.413, 127.429],
+    "오동": [36.33, 127.455],
+    "오류동": [36.317, 127.409],
+    "오정동": [36.3684, 127.4341],
+    "옥계동": [36.33, 127.455],
+    "온천1동": [36.362, 127.348],
+    "온천2동": [36.358, 127.355],
+    "와동": [36.391, 127.443],
+    "외삼동": [36.362, 127.345],
+    "용계동": [36.362, 127.345],
+    "용두1동": [36.3195, 127.4185],
+    "용두2동": [36.3195, 127.4185],
+    "용두동": [36.3195, 127.4185],
+    "용문동": [36.338, 127.387],
+    "용산동": [36.362, 127.345],
+    "용운동": [36.3269, 127.4436],
+    "용전동": [36.33, 127.455],
+    "용촌동": [36.362, 127.345],
+    "용호동": [36.345, 127.38],
+    "우명동": [36.345, 127.38],
+    "원내동": [36.287, 127.332],
+    "원동": [36.3311, 127.4341],
+    "원신흥동": [36.33, 127.35],
+    "원정동": [36.345, 127.38],
+    "원촌동": [36.362, 127.345],
+    "월평1동": [36.3608, 127.3676],
+    "월평2동": [36.3608, 127.3676],
+    "월평3동": [36.3608, 127.3676],
+    "월평동": [36.3608, 127.3676],
+    "유천1동": [36.319, 127.395],
+    "유천2동": [36.319, 127.395],
+    "유천동": [36.319, 127.395],
+    "은행동": [36.3253, 127.4212],
+    "은행선화동": [36.3253, 127.4212],
+    "읍내동": [36.395, 127.425],
+    "이사동": [36.33, 127.455],
+    "이현동": [36.345, 127.38],
+    "인동": [36.33, 127.438],
+    "자양동": [36.33, 127.442],
+    "자운동": [36.348, 127.306],
+    "장대동": [36.362, 127.345],
+    "장동": [36.355, 127.295],
+    "장안동": [36.305, 127.362],
+    "장척동": [36.33, 127.455],
+    "전민동": [36.4013, 127.3459],
+    "정동": [36.327, 127.423],
+    "정림동": [36.2977, 127.3789],
+    "정생동": [36.345, 127.38],
+    "주산동": [36.33, 127.455],
+    "주촌동": [36.362, 127.345],
+    "죽동": [36.376, 127.332],
+    "중동": [36.326, 127.422],
     "중리동": [36.3697, 127.4295],
+    "중앙동": [36.3311, 127.4341],
+    "중촌동": [36.321, 127.41],
+    "지족동": [36.3908, 127.3212],
+    "직동": [36.33, 127.455],
+    "진잠1동": [36.295, 127.34],
+    "진잠동": [36.295, 127.34],
+    "천동": [36.326, 127.443],
+    "추동": [36.33, 127.455],
+    "추목동": [36.362, 127.345],
+    "침산동": [36.362, 127.345],
+    "탄동": [36.362, 127.345],
+    "탄방동": [36.3444, 127.3925],
+    "탑립동": [36.418, 127.376],
+    "태평1동": [36.3092, 127.4139],
+    "태평2동": [36.3092, 127.4139],
+    "태평동": [36.3092, 127.4139],
+    "판암1동": [36.3105, 127.4529],
+    "판암2동": [36.3105, 127.4529],
+    "판암동": [36.3105, 127.4529],
+    "평촌동": [36.404, 127.428],
+    "평테크노동": [36.4241, 127.3958],
+    "하기동": [36.369, 127.323],
+    "하소동": [36.33, 127.455],
+    "학하동": [36.325, 127.325],
+    "홍도동": [36.3313, 127.4429],
+    "화암동": [36.355, 127.308],
+    "황호동": [36.418, 127.438],
+    "회덕1동": [36.387, 127.421],
+    "회덕2동": [36.387, 127.421],
+    "회덕동": [36.387, 127.421],
+    "효동": [36.329, 127.44],
+    "효평동": [36.33, 127.455],
+    "흑석동": [36.345, 127.38],
   };
 
   function haversineKm([lat1, lng1], [lat2, lng2]) {
@@ -828,7 +1027,44 @@
     $("tabVenue").style.display = isRecords ? "none" : "block";
     $("tabBtnRecords").classList.toggle("active", isRecords);
     $("tabBtnVenue").classList.toggle("active", !isRecords);
+    if (!isRecords) {
+      ensureVenueMap();
+      venueMap.invalidateSize();
+      renderVenueMap();
+    }
   };
+
+  function ensureVenueMap() {
+    if (venueMap) return;
+    venueMap = L.map("venueMap").setView([36.35, 127.38], 11);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap contributors",
+      maxZoom: 19,
+    }).addTo(venueMap);
+  }
+
+  function renderVenueMap() {
+    if (!venueMap) return;
+
+    venueMarkers.forEach(m => venueMap.removeLayer(m));
+    venueMarkers = [];
+
+    const withCoords = allVenues.filter(v => DONG_COORDS[v.dong]);
+    withCoords.forEach(v => {
+      const marker = L.marker(DONG_COORDS[v.dong]).addTo(venueMap);
+      marker.bindPopup(
+        `<b>${escapeHtml(v.name)}</b><br>${escapeHtml(v.dong)}` +
+        (v.address ? `<br>${escapeHtml(v.address)}` : "")
+      );
+      venueMarkers.push(marker);
+    });
+
+    if (withCoords.length) {
+      venueMap.fitBounds(L.featureGroup(venueMarkers).getBounds().pad(0.25));
+    } else {
+      venueMap.setView([36.35, 127.38], 11);
+    }
+  }
 
   async function loadScores() {
     const { data, error } = await db
@@ -1116,7 +1352,7 @@
     if (allComments.length) renderComments(allComments);
     updateVenueMeetupUi();
     if (allVenues.length) renderVenues();
-    if (currentMeetupId) renderAttendees();
+    renderAttendees();
     renderVenueRecommendation();
   }
 
@@ -1231,34 +1467,52 @@
     const loggedIn = !!currentUserId;
     $("venueWriteBox").style.display = loggedIn ? "block" : "none";
     $("venueLoginNotice").style.display = loggedIn ? "none" : "block";
-    $("meetupWriteBox").style.display = loggedIn ? "block" : "none";
-    $("meetupLoginNotice").style.display = loggedIn ? "none" : "block";
     $("myLocationBox").style.display = loggedIn ? "block" : "none";
     $("myLocationLoginNotice").style.display = loggedIn ? "none" : "block";
     if (loggedIn) fillMyLocationForm();
   }
 
   function fillMyLocationForm() {
-    const me = allMembers.find(m => m.id === myMemberId);
+    const sel = $("myLocationMemberSelect");
+    const prevValue = sel.value;
+    sel.innerHTML = allMembers.map(m =>
+      `<option value="${m.id}">${escapeHtml(m.nickname ? `${m.nickname} (${m.name})` : m.name)}</option>`
+    ).join("");
+
+    const stillExists = allMembers.some(m => m.id === prevValue);
+    sel.value = stillExists ? prevValue : (myMemberId || (allMembers[0] && allMembers[0].id) || "");
+
+    fillMyLocationFields();
+  }
+
+  function fillMyLocationFields() {
+    const selectedId = $("myLocationMemberSelect").value;
+    const me = allMembers.find(m => m.id === selectedId);
     if (!me) return;
     $("myDong").value = me.dong || "";
     $("myHasCar").checked = !!me.has_car;
   }
 
+  window.onMyLocationMemberChange = function () {
+    fillMyLocationFields();
+  };
+
   window.saveMyLocation = async function () {
-    if (!myMemberId) return setStatus("회원 정보를 찾을 수 없습니다. 다시 로그인해보세요.");
+    const targetId = $("myLocationMemberSelect").value;
+    if (!targetId) return setStatus("회원을 선택하세요.");
     const dong = $("myDong").value.trim();
     const hasCar = $("myHasCar").checked;
 
     const { error } = await db
       .from("bowling_members")
       .update({ dong, has_car: hasCar })
-      .eq("id", myMemberId);
+      .eq("id", targetId);
 
     if (error) return setStatus("저장 실패: " + error.message);
-    setStatus("내 위치 정보를 저장했습니다.");
+    setStatus("위치 정보를 저장했습니다.");
     await loadMembers();
-    if (currentMeetupId) await loadAttendees(currentMeetupId);
+    renderAttendees();
+    renderVenueRecommendation();
   };
 
   async function loadVenues() {
@@ -1274,6 +1528,7 @@
 
     allVenues = data || [];
     renderVenues();
+    renderVenueMap();
   }
 
   function renderVenues() {
@@ -1341,70 +1596,8 @@
     renderVenueRecommendation();
   }
 
-  async function loadMeetups() {
-    const { data, error } = await db
-      .from("bowling_meetups")
-      .select("id,meetup_date,note,created_by")
-      .order("meetup_date", { ascending: false });
-
-    if (error) return;
-
-    allMeetups = data || [];
-    const sel = $("meetupSelect");
-    const prevValue = sel.value;
-    sel.innerHTML = allMeetups.map(m =>
-      `<option value="${m.id}">${m.meetup_date}${m.note ? " · " + escapeHtml(m.note) : ""}</option>`
-    ).join("");
-
-    if (!allMeetups.length) {
-      $("attendeeArea").innerHTML = `<div class="empty">모임을 먼저 만들어주세요.</div>`;
-      $("venueRecommendArea").innerHTML = `<div class="empty">참석자를 체크하면 추천 결과가 표시됩니다.</div>`;
-      currentMeetupId = null;
-      return;
-    }
-
-    const stillExists = allMeetups.some(m => m.id === prevValue);
-    currentMeetupId = stillExists ? prevValue : allMeetups[0].id;
-    sel.value = currentMeetupId;
-    await loadAttendees(currentMeetupId);
-  }
-
-  window.onMeetupChange = async function () {
-    currentMeetupId = $("meetupSelect").value;
-    await loadAttendees(currentMeetupId);
-  };
-
-  window.addMeetup = async function () {
-    const meetupDate = $("meetupDate").value;
-    const note = $("meetupNote").value.trim();
-    if (!meetupDate) return setStatus("모임 날짜를 선택하세요.");
-    if (!currentUserId) return setStatus("로그인이 필요합니다.");
-
-    const { error } = await db.from("bowling_meetups").insert({
-      meetup_date: meetupDate,
-      note: note || null,
-      created_by: currentUserId,
-    });
-
-    if (error) return setStatus("모임 생성 실패: " + error.message);
-
-    $("meetupNote").value = "";
-    setStatus("모임을 만들었습니다.");
-    await loadMeetups();
-  };
-
-  async function loadAttendees(meetupId) {
-    if (!meetupId) return;
-    const { data, error } = await db
-      .from("bowling_meetup_attendees")
-      .select("member_id")
-      .eq("meetup_id", meetupId);
-
-    currentAttendeeMemberIds = error ? [] : (data || []).map(r => r.member_id);
-    renderAttendees();
-    renderVenueRecommendation();
-  }
-
+  // 참석자 선택은 DB에 저장하지 않는 이 화면 전용 임시 상태입니다.
+  // (모임을 별도로 만들 필요 없이, 그날그날 바로 체크하고 팀/장소를 정하기 위함)
   function renderAttendees() {
     if (!allMembers.length) {
       $("attendeeArea").innerHTML = `<div class="empty">등록된 회원이 없습니다.</div>`;
@@ -1414,41 +1607,29 @@
     const list = document.createElement("div");
     list.className = "attendee-list";
     allMembers.forEach(m => {
-      const checked = currentAttendeeMemberIds.includes(m.id);
+      const checked = selectedAttendeeIds.has(m.id);
       const chip = document.createElement("div");
       chip.className = "attendee-chip" + (checked ? " checked" : "");
       chip.innerHTML = memberDisplay(m.name, m.nickname) + (m.has_car ? " 🚗" : "");
-      chip.addEventListener("click", () => toggleAttendance(m.id));
+      chip.addEventListener("click", () => toggleAttendeeSelection(m.id));
       list.appendChild(chip);
     });
     $("attendeeArea").innerHTML = "";
     $("attendeeArea").appendChild(list);
   }
 
-  async function toggleAttendance(memberId) {
-    if (!currentMeetupId) return setStatus("모임을 먼저 선택하세요.");
-    if (!currentUserId) return setStatus("로그인이 필요합니다.");
-
-    const isChecked = currentAttendeeMemberIds.includes(memberId);
-    if (isChecked) {
-      const { error } = await db
-        .from("bowling_meetup_attendees")
-        .delete()
-        .eq("meetup_id", currentMeetupId)
-        .eq("member_id", memberId);
-      if (error) return setStatus("참석 취소 실패: " + error.message);
+  function toggleAttendeeSelection(memberId) {
+    if (selectedAttendeeIds.has(memberId)) {
+      selectedAttendeeIds.delete(memberId);
     } else {
-      const { error } = await db
-        .from("bowling_meetup_attendees")
-        .insert({ meetup_id: currentMeetupId, member_id: memberId });
-      if (error) return setStatus("참석 등록 실패: " + error.message);
+      selectedAttendeeIds.add(memberId);
     }
-
-    await loadAttendees(currentMeetupId);
+    renderAttendees();
+    renderVenueRecommendation();
   }
 
   function renderVenueRecommendation() {
-    if (!currentMeetupId || !currentAttendeeMemberIds.length) {
+    if (!selectedAttendeeIds.size) {
       $("venueRecommendArea").innerHTML = `<div class="empty">참석자를 체크하면 추천 결과가 표시됩니다.</div>`;
       return;
     }
@@ -1458,7 +1639,7 @@
       return;
     }
 
-    const attendees = allMembers.filter(m => currentAttendeeMemberIds.includes(m.id));
+    const attendees = allMembers.filter(m => selectedAttendeeIds.has(m.id));
     const noCarCount = attendees.filter(m => !m.has_car).length;
 
     // 자차 없는 회원의 거리를 더 우선적으로 고려하기 위한 가중치.
@@ -1536,12 +1717,12 @@
   }
 
   window.generateTeams = function () {
-    if (!currentMeetupId || !currentAttendeeMemberIds.length) {
-      $("teamArea").innerHTML = `<div class="empty">참석 체크된 인원이 없습니다.</div>`;
+    if (!selectedAttendeeIds.size) {
+      $("teamArea").innerHTML = `<div class="empty">참석자를 먼저 선택하세요.</div>`;
       return;
     }
 
-    const attendees = allMembers.filter(m => currentAttendeeMemberIds.includes(m.id));
+    const attendees = allMembers.filter(m => selectedAttendeeIds.has(m.id));
     const stats = computeStats(allRows);
     const statMap = new Map(stats.map(s => [s.memberId, s.avg]));
     const fallbackAvg = stats.length
@@ -1636,14 +1817,12 @@
   db.auth.onAuthStateChange(() => refreshAuthUi());
 
   populateDongSelects();
-  $("meetupDate").value = todayLocal();
 
   await loadMembers();
   await refreshAuthUi();
   await loadScores();
   await loadComments();
   await loadVenues();
-  await loadMeetups();
 </script>
 </body>
 </html>
