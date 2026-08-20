@@ -484,8 +484,9 @@
             <h3 style="margin:0 0 10px;font-size:16px;">볼링장 등록</h3>
             <div class="form-grid">
               <input type="text" id="venueName" placeholder="볼링장 이름">
-              <select id="venueDong"></select>
+              <input type="text" id="venueDong" list="dongDatalist" placeholder="동 이름 (예: 둔산동)">
             </div>
+            <div class="note" style="margin-top:4px;">목록에 없는 동이면 직접 입력해도 됩니다. (거리 계산은 등록된 동 좌표가 있을 때만 가능)</div>
             <div class="form-grid" style="margin-top:10px;">
               <input type="text" id="venueAddress" placeholder="상세 주소 (선택)">
               <input type="text" id="venuePrice" placeholder="가격 정보 (선택)">
@@ -547,8 +548,9 @@
           <div class="label">🙋 내 위치 정보</div>
           <div id="myLocationBox" style="display:none;">
             <div class="form-grid" style="grid-template-columns:1fr;">
-              <select id="myDong"></select>
+              <input type="text" id="myDong" list="dongDatalist" placeholder="동 이름 (예: 둔산동)">
             </div>
+            <div class="note" style="margin-top:4px;">목록에 없는 동이면 직접 입력해도 됩니다.</div>
             <label style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:13px;font-weight:600;">
               <input type="checkbox" id="myHasCar" style="width:auto;margin:0;"> 자차 있음
             </label>
@@ -558,6 +560,7 @@
         </div>
       </div>
     </div>
+    <datalist id="dongDatalist"></datalist>
   </div>
 </div>
 
@@ -813,14 +816,10 @@
   }
 
   function populateDongSelects() {
+    // venueDong/myDong은 자유 입력 텍스트 필드이며, 이 목록은 자동완성 힌트일 뿐
+    // 목록에 없는 동도 직접 입력해서 저장할 수 있음(거리 계산만 좌표가 있는 동에 한해 동작).
     const dongNames = Object.keys(DONG_COORDS);
-    for (const selId of ["venueDong", "myDong"]) {
-      const sel = $(selId);
-      if (!sel) continue;
-      const prevValue = sel.value;
-      sel.innerHTML = dongNames.map(d => `<option value="${d}">${d}</option>`).join("");
-      if (dongNames.includes(prevValue)) sel.value = prevValue;
-    }
+    $("dongDatalist").innerHTML = dongNames.map(d => `<option value="${d}"></option>`).join("");
   }
 
   window.showTab = function (name) {
@@ -1242,13 +1241,13 @@
   function fillMyLocationForm() {
     const me = allMembers.find(m => m.id === myMemberId);
     if (!me) return;
-    if (me.dong && DONG_COORDS[me.dong]) $("myDong").value = me.dong;
+    $("myDong").value = me.dong || "";
     $("myHasCar").checked = !!me.has_car;
   }
 
   window.saveMyLocation = async function () {
     if (!myMemberId) return setStatus("회원 정보를 찾을 수 없습니다. 다시 로그인해보세요.");
-    const dong = $("myDong").value;
+    const dong = $("myDong").value.trim();
     const hasCar = $("myHasCar").checked;
 
     const { error } = await db
@@ -1305,12 +1304,13 @@
 
   window.addVenue = async function () {
     const name = $("venueName").value.trim();
-    const dong = $("venueDong").value;
+    const dong = $("venueDong").value.trim();
     const address = $("venueAddress").value.trim();
     const priceInfo = $("venuePrice").value.trim();
     const review = $("venueReview").value.trim();
 
     if (!name) return setStatus("볼링장 이름을 입력하세요.");
+    if (!dong) return setStatus("동을 입력하세요.");
     if (!currentUserId) return setStatus("로그인이 필요합니다.");
 
     const { error } = await db.from("bowling_venues").insert({
@@ -1417,7 +1417,7 @@
       const checked = currentAttendeeMemberIds.includes(m.id);
       const chip = document.createElement("div");
       chip.className = "attendee-chip" + (checked ? " checked" : "");
-      chip.textContent = (m.nickname || m.name) + (m.has_car ? " 🚗" : "");
+      chip.innerHTML = memberDisplay(m.name, m.nickname) + (m.has_car ? " 🚗" : "");
       chip.addEventListener("click", () => toggleAttendance(m.id));
       list.appendChild(chip);
     });
@@ -1428,9 +1428,6 @@
   async function toggleAttendance(memberId) {
     if (!currentMeetupId) return setStatus("모임을 먼저 선택하세요.");
     if (!currentUserId) return setStatus("로그인이 필요합니다.");
-    if (memberId !== myMemberId && !isAdminUser) {
-      return setStatus("본인 참석 여부만 체크할 수 있습니다.");
-    }
 
     const isChecked = currentAttendeeMemberIds.includes(memberId);
     if (isChecked) {
