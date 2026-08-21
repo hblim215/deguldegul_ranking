@@ -646,7 +646,11 @@
       <div class="note" style="margin-bottom:10px;">전광판/모니터를 찍은 점수표 사진을 올리면 숫자를 자동으로 읽어서 표로 정리해드려요. 인식 정확도가 완벽하지 않으니 저장 전에 회원과 점수를 꼭 확인/수정해주세요.</div>
       <input type="file" id="ocrFileInput" accept="image/*" capture="environment" onchange="onOcrFileChange(event)">
       <div id="ocrPreviewWrap" style="display:none;margin-top:10px;">
-        <img id="ocrPreview" style="max-width:100%;border-radius:10px;" alt="점수표 미리보기" />
+        <div class="note" style="margin-bottom:6px;">사진에서 <b>점수표(특히 총점 칸)만 드래그</b>해서 선택하면 그 부분만 인식해요. 선택하지 않으면 사진 전체를 인식합니다.</div>
+        <div style="max-width:100%;">
+          <canvas id="ocrCropCanvas" style="max-width:100%;border-radius:10px;display:block;touch-action:none;"></canvas>
+        </div>
+        <button type="button" class="ghost" onclick="resetOcrCrop()" style="margin-top:8px;">영역 선택 초기화</button>
       </div>
       <button class="primary" id="ocrRunBtn" onclick="runOcr()" style="margin-top:10px;" disabled>사진에서 인식하기</button>
       <div id="ocrProgress" class="note" style="display:none;"></div>
@@ -977,6 +981,11 @@
   let growthChart = null;
   let ocrRows = [];
   let ocrRowSeq = 0;
+  let ocrImageEl = null;
+  let ocrCropRect = null;
+  let ocrCropDragging = false;
+  let ocrCropStart = null;
+  let ocrCropEventsBound = false;
 
   // 대전 5개구 동(洞) 대략적 중심 좌표 (거리 "상대 비교"용 근사치이며 정밀 지오코딩이 아님)
   // - 대전 나무위키 문서(업로드된 HTML)에서 실제 존재/존재했던 동 이름을 모두 추출해 반영
@@ -1247,6 +1256,7 @@
     }
     if (name === "ocr") {
       updateOcrLoginUi();
+      if (ocrImageEl) drawOcrCropCanvas();
     }
     if (name === "growth") {
       renderGrowthChart();
@@ -2162,25 +2172,164 @@
   window.onOcrFileChange = function (e) {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    $("ocrPreview").src = url;
-    $("ocrPreviewWrap").style.display = "block";
-    $("ocrRunBtn").disabled = false;
-    $("ocrResultBox").style.display = "none";
-    ocrRows = [];
+    const img = new Image();
+    img.onload = () => {
+      ocrImageEl = img;
+      ocrCropRect = null;
+      drawOcrCropCanvas();
+      bindOcrCropEvents();
+      $("ocrPreviewWrap").style.display = "block";
+      $("ocrRunBtn").disabled = false;
+      $("ocrResultBox").style.display = "none";
+      ocrRows = [];
+    };
+    img.onerror = () => setStatus("이미지를 불러오지 못했습니다.");
+    img.src = URL.createObjectURL(file);
   };
 
+  function drawOcrCropCanvas() {
+    if (!ocrImageEl) return;
+    const canvas = $("ocrCropCanvas");
+    const maxW = canvas.parentElement.clientWidth || 360;
+    const scale = Math.min(1, maxW / ocrImageEl.width);
+    canvas.width = Math.round(ocrImageEl.width * scale);
+    canvas.height = Math.round(ocrImageEl.height * scale);
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(ocrImageEl, 0, 0, canvas.width, canvas.height);
+    if (ocrCropRect) {
+      ctx.fillStyle = "rgba(47,125,60,0.15)";
+      ctx.fillRect(ocrCropRect.x, ocrCropRect.y, ocrCropRect.w, ocrCropRect.h);
+      ctx.strokeStyle = "#2f7d3c";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.strokeRect(ocrCropRect.x, ocrCropRect.y, ocrCropRect.w, ocrCropRect.h);
+    }
+  }
+
+  function getOcrCanvasPoint(e) {
+    const canvas = $("ocrCropCanvas");
+    const rect = canvas.getBoundingClientRect();
+    const point = e.touches && e.touches.length ? e.touches[0] : e;
+    return {
+      x: Math.max(0, Math.min(canvas.width, point.clientX - rect.left)),
+      y: Math.max(0, Math.min(canvas.height, point.clientY - rect.top)),
+    };
+  }
+
+  function bindOcrCropEvents() {
+    if (ocrCropEventsBound) return;
+    ocrCropEventsBound = true;
+    const canvas = $("ocrCropCanvas");
+
+    const start = (e) => {
+      e.preventDefault();
+      ocrCropDragging = true;
+      ocrCropStart = getOcrCanvasPoint(e);
+      ocrCropRect = { x: ocrCropStart.x, y: ocrCropStart.y, w: 0, h: 0 };
+    };
+    const move = (e) => {
+      if (!ocrCropDragging) return;
+      e.preventDefault();
+      const p = getOcrCanvasPoint(e);
+      ocrCropRect = {
+        x: Math.min(ocrCropStart.x, p.x),
+        y: Math.min(ocrCropStart.y, p.y),
+        w: Math.abs(p.x - ocrCropStart.x),
+        h: Math.abs(p.y - ocrCropStart.y),
+      };
+      drawOcrCropCanvas();
+    };
+    const end = () => { ocrCropDragging = false; };
+
+    canvas.addEventListener("mousedown", start);
+    canvas.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", end);
+    canvas.addEventListener("touchstart", start, { passive: false });
+    canvas.addEventListener("touchmove", move, { passive: false });
+    canvas.addEventListener("touchend", end);
+  }
+
+  window.resetOcrCrop = function () {
+    ocrCropRect = null;
+    drawOcrCropCanvas();
+  };
+
+  // 선택 영역(없으면 전체 사진)을 원본 해상도 기준으로 잘라낸 캔버스를 반환
+  function getOcrCropSourceCanvas() {
+    const canvas = $("ocrCropCanvas");
+    const scaleX = ocrImageEl.width / canvas.width;
+    const scaleY = ocrImageEl.height / canvas.height;
+
+    let sx = 0, sy = 0, sw = ocrImageEl.width, sh = ocrImageEl.height;
+    if (ocrCropRect && ocrCropRect.w > 10 && ocrCropRect.h > 10) {
+      sx = ocrCropRect.x * scaleX;
+      sy = ocrCropRect.y * scaleY;
+      sw = ocrCropRect.w * scaleX;
+      sh = ocrCropRect.h * scaleY;
+    }
+
+    const out = document.createElement("canvas");
+    out.width = sw;
+    out.height = sh;
+    out.getContext("2d").drawImage(ocrImageEl, sx, sy, sw, sh, 0, 0, sw, sh);
+    return out;
+  }
+
+  // 흑백 + 대비 강화 + 확대해서 캔버스에 그린 뒤 Blob으로 반환.
+  // LED 전광판처럼 배경색이 알록달록한 사진은 이 전처리만으로도 숫자 인식률이 꽤 올라갑니다.
+  function preprocessCanvasForOcr(sourceCanvas) {
+    return new Promise((resolve, reject) => {
+      const scale = 2;
+      const canvas = document.createElement("canvas");
+      canvas.width = sourceCanvas.width * scale;
+      canvas.height = sourceCanvas.height * scale;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(sourceCanvas, 0, 0, canvas.width, canvas.height);
+
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const d = imgData.data;
+
+      // 1) 흑백 변환하면서 최소/최대 밝기 파악
+      let min = 255, max = 0;
+      const gray = new Uint8ClampedArray(d.length / 4);
+      for (let i = 0, j = 0; i < d.length; i += 4, j++) {
+        const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        gray[j] = g;
+        if (g < min) min = g;
+        if (g > max) max = g;
+      }
+
+      // 2) 대비 강화(min~max를 0~255로 늘리기)
+      const range = Math.max(1, max - min);
+      for (let i = 0, j = 0; i < d.length; i += 4, j++) {
+        const v = Math.round(((gray[j] - min) / range) * 255);
+        d[i] = d[i + 1] = d[i + 2] = v;
+      }
+
+      ctx.putImageData(imgData, 0, 0);
+      canvas.toBlob(blob => (blob ? resolve(blob) : reject(new Error("이미지 변환 실패"))), "image/png");
+    });
+  }
+
   window.runOcr = async function () {
-    const file = $("ocrFileInput").files[0];
-    if (!file) return setStatus("먼저 사진을 선택하세요.");
+    if (!ocrImageEl) return setStatus("먼저 사진을 선택하세요.");
     if (typeof Tesseract === "undefined") return setStatus("인식 라이브러리를 불러오지 못했어요. 인터넷 연결을 확인해주세요.");
 
     $("ocrRunBtn").disabled = true;
     $("ocrProgress").style.display = "block";
-    $("ocrProgress").textContent = "이미지를 분석하는 중... (처음엔 시간이 좀 걸려요)";
+    $("ocrProgress").textContent = "선택한 영역을 다듬는 중...";
 
     try {
-      const { data } = await Tesseract.recognize(file, "eng", {
+      const cropCanvas = getOcrCropSourceCanvas();
+      const processed = await preprocessCanvasForOcr(cropCanvas);
+
+      $("ocrProgress").textContent = "이미지를 분석하는 중... (처음엔 시간이 좀 걸려요)";
+      const { data } = await Tesseract.recognize(processed, "eng", {
+        // 이름/기호는 어차피 회원 선택으로 처리하므로, 숫자만 읽도록 제한해서 오인식을 줄임
+        tessedit_char_whitelist: "0123456789",
+        // 문단이 아니라 화면 곳곳에 흩어진 숫자를 찾는 모드
+        tessedit_pageseg_mode: "11",
         logger: (m) => {
           if (m.status === "recognizing text" && typeof m.progress === "number") {
             $("ocrProgress").textContent = `텍스트 인식 중... ${Math.round(m.progress * 100)}%`;
@@ -2189,7 +2338,7 @@
           }
         },
       });
-      buildOcrRowsFromText(data.text || "");
+      buildOcrRowsFromWords(data);
     } catch (err) {
       setStatus("사진 인식에 실패했어요: " + err.message);
     } finally {
@@ -2198,23 +2347,35 @@
     }
   };
 
-  function buildOcrRowsFromText(text) {
-    const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+  function buildOcrRowsFromWords(data) {
     ocrRows = [];
     ocrRowSeq = 0;
 
-    lines.forEach(line => {
-      // 0~300 사이의 "그럴듯한 점수" 숫자만 후보로 추출.
-      // 전광판 사진에는 프레임별 소계, 날짜, 레인 번호 등도 함께 찍히므로 완벽하지 않습니다.
-      const numbers = (line.match(/\b\d{1,3}\b/g) || [])
-        .map(n => parseInt(n, 10))
-        .filter(n => n >= 0 && n <= 300);
+    // 신뢰도 낮은 후보까지 다 보여주면 오히려 헷갈리므로, 어느 정도 확신 있는 것만 후보로 추립니다.
+    const MIN_CONFIDENCE = 55;
+    const words = (data.words || [])
+      .map(w => ({ text: (w.text || "").trim(), confidence: w.confidence }))
+      .filter(w => /^\d{1,3}$/.test(w.text))
+      .map(w => ({ score: parseInt(w.text, 10), confidence: Math.round(w.confidence) }))
+      .filter(w => w.score >= 0 && w.score <= 300)
+      .sort((a, b) => b.confidence - a.confidence);
 
-      if (!numbers.length) return;
-      // 한 줄에서 가장 마지막 숫자(보통 총점 위치)를 점수 후보로 사용
-      const candidate = numbers[numbers.length - 1];
-      ocrRows.push({ id: ++ocrRowSeq, rawText: line, memberId: "", score: candidate });
+    words.forEach(w => {
+      ocrRows.push({
+        id: ++ocrRowSeq,
+        rawText: `인식된 숫자 (신뢰도 ${w.confidence}%)`,
+        memberId: "",
+        score: w.score,
+      });
     });
+
+    if (!ocrRows.length) {
+      // words 인식이 비었으면 전체 텍스트에서 최소한으로 시도
+      const fallback = (data.text || "").match(/\b\d{1,3}\b/g) || [];
+      fallback.map(n => parseInt(n, 10)).filter(n => n <= 300).forEach(n => {
+        ocrRows.push({ id: ++ocrRowSeq, rawText: "(신뢰도 낮음 - 직접 확인 필요)", memberId: "", score: n });
+      });
+    }
 
     if (!ocrRows.length) {
       ocrRows.push({ id: ++ocrRowSeq, rawText: "(숫자를 인식하지 못했어요 - 직접 입력하세요)", memberId: "", score: "" });
@@ -2223,7 +2384,7 @@
     if (!$("ocrPlayedAt").value) $("ocrPlayedAt").value = todayLocal();
     $("ocrResultBox").style.display = "block";
     renderOcrRows();
-    setStatus(`${ocrRows.length}개 줄을 인식했어요. 회원과 점수를 확인한 뒤 저장하세요.`);
+    setStatus(`${ocrRows.length}개 숫자 후보를 찾았어요. 회원과 점수를 확인한 뒤 저장하세요.`);
   }
 
   function renderOcrRows() {
@@ -2285,6 +2446,8 @@
 
     setStatus(`${payload.length}건의 점수를 저장했습니다.`);
     ocrRows = [];
+    ocrImageEl = null;
+    ocrCropRect = null;
     $("ocrResultBox").style.display = "none";
     $("ocrFileInput").value = "";
     $("ocrPreviewWrap").style.display = "none";
