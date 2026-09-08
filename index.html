@@ -455,15 +455,33 @@
 
     <div class="side-col">
       <div class="section side-card">
-        <div class="label">🗓 이달의 AVG 1위</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px;">
+          <span style="font-size:12px;color:#6d746d;font-weight:700;">🏅 하이라이트 기준</span>
+          <select id="highlightPeriodToggle" onchange="onHighlightPeriodChange()" style="width:auto;padding:5px 8px;font-size:12px;">
+            <option value="month">이번 달</option>
+            <option value="all">전체 기록</option>
+            <option value="range">기간 지정</option>
+          </select>
+        </div>
+        <div id="highlightRangeBox" style="display:none;margin-top:8px;">
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input type="month" id="highlightRangeStart" style="padding:6px 8px;font-size:12px;">
+            <span style="font-size:12px;color:#8a908a;">~</span>
+            <input type="month" id="highlightRangeEnd" style="padding:6px 8px;font-size:12px;">
+          </div>
+          <button type="button" class="secondary" style="margin-top:6px;width:100%;" onclick="onHighlightPeriodChange()">적용</button>
+        </div>
+      </div>
+      <div class="section side-card">
+        <div class="label" id="monthAvgLabel">🗓 이달의 AVG 1위</div>
         <div class="value" id="monthAvgLeader">-</div>
       </div>
       <div class="section side-card">
-        <div class="label">📈 이달의 상승률 1위</div>
+        <div class="label" id="monthImproveLabel">📈 이달의 상승률 1위</div>
         <div class="value" id="monthImproveLeader">-</div>
       </div>
       <div class="section side-card">
-        <div class="label">🎯 이달의 경기수 1위</div>
+        <div class="label" id="monthGamesLabel">🎯 이달의 경기수 1위</div>
         <div class="value" id="monthGamesLeader">-</div>
       </div>
 
@@ -543,7 +561,18 @@
       </div>
       <button class="primary" onclick="addScores()">점수 등록</button>
       <button class="secondary" onclick="logout()">로그아웃</button>
+      <button class="secondary" onclick="togglePasswordChangeBox()">비밀번호 변경</button>
       <div class="note">1~3게임 중 실제 진행한 게임만 입력하면 됩니다. 0~300점만 등록됩니다.</div>
+
+      <div id="passwordChangeBox" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid #e5e8e3;">
+        <h3 style="margin:0 0 10px;font-size:15px;">🔒 비밀번호 변경</h3>
+        <div class="form-grid">
+          <input type="password" id="newPassword" placeholder="새 비밀번호 (6자 이상)">
+          <input type="password" id="newPasswordConfirm" placeholder="새 비밀번호 확인">
+        </div>
+        <button class="primary" onclick="changePassword()">변경하기</button>
+        <button class="secondary" onclick="togglePasswordChangeBox()">취소</button>
+      </div>
     </div>
 
     <div class="status" id="status"></div>
@@ -587,6 +616,13 @@
           <h2>🙋 참석자 선택</h2>
           <div class="note" style="margin-bottom:10px;">오늘 참석하는 회원을 클릭해서 선택하세요. (별도로 저장되지 않고, 이 화면에서만 사용돼요)</div>
           <div id="attendeeArea"><div class="empty">회원 목록을 불러오는 중...</div></div>
+
+          <div class="note" style="margin:14px 0 6px;font-weight:700;">🙌 게스트 추가</div>
+          <div class="form-grid" style="grid-template-columns:1fr auto;">
+            <input type="text" id="guestNameInput" placeholder="게스트 이름" onkeydown="if(event.key==='Enter'){event.preventDefault();addGuest();}">
+            <button type="button" class="secondary" style="margin-top:0;" onclick="addGuest()">추가</button>
+          </div>
+          <div id="guestArea" style="margin-top:8px;"></div>
         </div>
 
         <div class="section">
@@ -719,8 +755,11 @@
       <div id="meetupWriteBox">
         <div class="form-grid">
           <input type="date" id="meetupDate">
-          <select id="meetupVenueSelect"><option value="">간 볼링장 선택 (선택)</option></select>
+          <select id="meetupVenueSelect" onchange="onMeetupVenueSelectChange()">
+            <option value="">간 볼링장 선택 (선택)</option>
+          </select>
         </div>
+        <input type="text" id="meetupVenueManual" placeholder="볼링장 이름 직접 입력" style="display:none;margin-top:8px;">
         <div class="note" style="margin:10px 0 4px;font-weight:700;">참여자</div>
         <div id="meetupAttendeeArea"><div class="empty">회원 목록을 불러오는 중...</div></div>
         <textarea id="meetupNote" rows="2" placeholder="메모 (선택)" style="margin-top:10px;"></textarea>
@@ -980,6 +1019,8 @@
   let announceSelectedVenueId = null;
   let growthChart = null;
   let ocrRows = [];
+  let guestList = [];
+  let guestSeq = 0;
   let ocrRowSeq = 0;
   let ocrImageEl = null;
   let ocrCropRect = null;
@@ -1426,34 +1467,88 @@
     renderRankingTable(allRows);
   };
 
-  function renderMonthlyHighlights(rows) {
-    const now = new Date();
-    const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
+  window.onHighlightPeriodChange = function () {
+    const mode = $("highlightPeriodToggle").value;
+    $("highlightRangeBox").style.display = mode === "range" ? "block" : "none";
+    renderMonthlyHighlights(allRows);
+  };
 
-    const thisMonthRows = rows.filter(r => (r.played_at || "").slice(0, 7) === thisMonth);
+  function getPrevMonthKey(monthKey) {
+    const [y, m] = monthKey.split("-").map(Number);
+    const d = new Date(y, m - 2, 1); // m은 1~12, Date의 month는 0-index라 -2 하면 "전달"이 됨
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  }
+
+  window.renderMonthlyHighlights = function (rows) {
+    const mode = $("highlightPeriodToggle") ? $("highlightPeriodToggle").value : "month";
+
+    if (mode === "all") {
+      renderAggregateHighlights(rows, {
+        avg: "🏆 전체 AVG 1위",
+        improve: "📈 전체 성장률 1위 (첫달 대비 최근달)",
+        games: "🎯 전체 경기수 1위",
+      });
+      return;
+    }
+
+    if (mode === "range") {
+      const start = $("highlightRangeStart").value;
+      const end = $("highlightRangeEnd").value;
+      if (!start || !end) {
+        $("monthAvgLabel").textContent = "🏆 기간 지정 AVG 1위";
+        $("monthImproveLabel").textContent = "📈 기간 지정 성장률 1위";
+        $("monthGamesLabel").textContent = "🎯 기간 지정 경기수 1위";
+        const msg = `<span style="font-size:13px;color:#8a908a;">시작 월과 종료 월을 고르고 "적용"을 눌러주세요.</span>`;
+        $("monthAvgLeader").innerHTML = msg;
+        $("monthGamesLeader").innerHTML = msg;
+        $("monthImproveLeader").innerHTML = msg;
+        return;
+      }
+      const [lo, hi] = start <= end ? [start, end] : [end, start];
+      const rangeRows = rows.filter(r => {
+        const m = (r.played_at || "").slice(0, 7);
+        return m && m >= lo && m <= hi;
+      });
+      renderAggregateHighlights(rangeRows, {
+        avg: `🏆 ${lo}~${hi} AVG 1위`,
+        improve: `📈 ${lo}~${hi} 성장률 1위 (기간 내 첫달 대비 마지막달)`,
+        games: `🎯 ${lo}~${hi} 경기수 1위`,
+      });
+      return;
+    }
+
+    const now = new Date();
+    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const targetMonth = mode === "month" ? currentMonthKey : mode;
+    const isCurrentMonth = targetMonth === currentMonthKey;
+
+    $("monthAvgLabel").textContent = isCurrentMonth ? "🗓 이달의 AVG 1위" : `🗓 ${targetMonth} AVG 1위`;
+    $("monthImproveLabel").textContent = isCurrentMonth ? "📈 이달의 상승률 1위" : `📈 ${targetMonth} 상승률 1위`;
+    $("monthGamesLabel").textContent = isCurrentMonth ? "🎯 이달의 경기수 1위" : `🎯 ${targetMonth} 경기수 1위`;
+
+    const prevMonth = getPrevMonthKey(targetMonth);
+    const targetRows = rows.filter(r => (r.played_at || "").slice(0, 7) === targetMonth);
     const prevMonthRows = rows.filter(r => (r.played_at || "").slice(0, 7) === prevMonth);
 
-    if (!thisMonthRows.length) {
-      const emptyMsg = `<span style="font-size:13px;color:#8a908a;">이달 기록 없음</span>`;
+    if (!targetRows.length) {
+      const emptyMsg = `<span style="font-size:13px;color:#8a908a;">해당 월 기록 없음</span>`;
       $("monthAvgLeader").innerHTML = emptyMsg;
       $("monthGamesLeader").innerHTML = emptyMsg;
       $("monthImproveLeader").innerHTML = emptyMsg;
       return;
     }
 
-    const thisStats = computeStats(thisMonthRows);
+    const targetStats = computeStats(targetRows);
 
     $("monthAvgLeader").innerHTML =
-      `${memberDisplay(thisStats[0].name, thisStats[0].nickname)}<div class="sub">AVG ${thisStats[0].avg.toFixed(1)}</div>`;
+      `${memberDisplay(targetStats[0].name, targetStats[0].nickname)}<div class="sub">AVG ${targetStats[0].avg.toFixed(1)}</div>`;
 
-    const gamesLeader = [...thisStats].sort((a, b) => b.games - a.games)[0];
+    const gamesLeader = [...targetStats].sort((a, b) => b.games - a.games)[0];
     $("monthGamesLeader").innerHTML =
       `${memberDisplay(gamesLeader.name, gamesLeader.nickname)}<div class="sub">${gamesLeader.games}게임</div>`;
 
     if (!prevMonthRows.length) {
-      $("monthImproveLeader").innerHTML = `<span style="font-size:13px;color:#8a908a;">비교할 지난달 기록 없음</span>`;
+      $("monthImproveLeader").innerHTML = `<span style="font-size:13px;color:#8a908a;">비교할 이전 달 기록 없음</span>`;
       return;
     }
 
@@ -1461,7 +1556,7 @@
     const prevMap = new Map(prevStats.map(s => [s.memberId, s.avg]));
 
     let best = null;
-    for (const s of thisStats) {
+    for (const s of targetStats) {
       if (!prevMap.has(s.memberId)) continue;
       const prevAvg = prevMap.get(s.memberId);
       if (prevAvg <= 0) continue;
@@ -1473,6 +1568,73 @@
 
     if (!best) {
       $("monthImproveLeader").innerHTML = `<span style="font-size:13px;color:#8a908a;">비교 가능한 기록 없음</span>`;
+    } else {
+      const sign = best.rate >= 0 ? "+" : "";
+      $("monthImproveLeader").innerHTML =
+        `${memberDisplay(best.name, best.nickname)}<div class="sub">${sign}${best.rate.toFixed(1)}%</div>`;
+    }
+  };
+
+  // 전체 기록 기준 하이라이트: AVG/경기수는 누적 전체 기준, 상승률은 "각자의 첫 기록 달" 대비 "가장 최근 달" 평균 변화로 계산
+  // AVG/경기수는 넘겨받은 rows 전체 기준, 상승률은 "그 안에서 가장 이른 달" 대비 "가장 최근 달" 평균 변화로 계산.
+  // 전체 기록 모드와 기간 지정 모드가 이 함수를 공유합니다.
+  function renderAggregateHighlights(rows, titles) {
+    $("monthAvgLabel").textContent = titles.avg;
+    $("monthImproveLabel").textContent = titles.improve;
+    $("monthGamesLabel").textContent = titles.games;
+
+    if (!rows.length) {
+      const emptyMsg = `<span style="font-size:13px;color:#8a908a;">해당 기간 기록 없음</span>`;
+      $("monthAvgLeader").innerHTML = emptyMsg;
+      $("monthGamesLeader").innerHTML = emptyMsg;
+      $("monthImproveLeader").innerHTML = emptyMsg;
+      return;
+    }
+
+    const stats = computeStats(rows);
+
+    $("monthAvgLeader").innerHTML =
+      `${memberDisplay(stats[0].name, stats[0].nickname)}<div class="sub">AVG ${stats[0].avg.toFixed(1)}</div>`;
+
+    const gamesLeader = [...stats].sort((a, b) => b.games - a.games)[0];
+    $("monthGamesLeader").innerHTML =
+      `${memberDisplay(gamesLeader.name, gamesLeader.nickname)}<div class="sub">${gamesLeader.games}게임</div>`;
+
+    // 회원별로 월별 그룹화 → 가장 이른 달과 가장 최근 달의 평균을 비교
+    const byMember = new Map();
+    rows.forEach(r => {
+      const key = r.member_id;
+      const month = (r.played_at || "").slice(0, 7);
+      if (!month) return;
+      if (!byMember.has(key)) {
+        byMember.set(key, {
+          name: r.bowling_members?.name || "알 수 없음",
+          nickname: r.bowling_members?.nickname || "",
+          months: new Map(),
+        });
+      }
+      const entry = byMember.get(key);
+      if (!entry.months.has(month)) entry.months.set(month, []);
+      entry.months.get(month).push(r.score);
+    });
+
+    let best = null;
+    byMember.forEach(entry => {
+      const monthKeys = [...entry.months.keys()].sort();
+      if (monthKeys.length < 2) return; // 기록이 있는 달이 2개월 이상이어야 성장률 비교 가능
+      const firstScores = entry.months.get(monthKeys[0]);
+      const lastScores = entry.months.get(monthKeys[monthKeys.length - 1]);
+      const firstAvg = firstScores.reduce((a, b) => a + b, 0) / firstScores.length;
+      const lastAvg = lastScores.reduce((a, b) => a + b, 0) / lastScores.length;
+      if (firstAvg <= 0) return;
+      const rate = ((lastAvg - firstAvg) / firstAvg) * 100;
+      if (!best || rate > best.rate) {
+        best = { name: entry.name, nickname: entry.nickname, rate };
+      }
+    });
+
+    if (!best) {
+      $("monthImproveLeader").innerHTML = `<span style="font-size:13px;color:#8a908a;">비교 가능한 기록 없음 (2개월 이상 기록 필요)</span>`;
     } else {
       const sign = best.rate >= 0 ? "+" : "";
       $("monthImproveLeader").innerHTML =
@@ -1606,12 +1768,40 @@
     await refreshAuthUi();
   };
 
+  window.togglePasswordChangeBox = function () {
+    const box = $("passwordChangeBox");
+    const show = box.style.display === "none";
+    box.style.display = show ? "block" : "none";
+    if (show) {
+      $("newPassword").value = "";
+      $("newPasswordConfirm").value = "";
+    }
+  };
+
+  window.changePassword = async function () {
+    const pw = $("newPassword").value;
+    const pwConfirm = $("newPasswordConfirm").value;
+
+    if (!pw || pw.length < 6) return setStatus("비밀번호는 6자 이상이어야 합니다.");
+    if (pw !== pwConfirm) return setStatus("새 비밀번호가 서로 일치하지 않습니다.");
+
+    setStatus("비밀번호를 변경하는 중...");
+    const { error } = await db.auth.updateUser({ password: pw });
+    if (error) return setStatus("비밀번호 변경 실패: " + error.message);
+
+    setStatus("비밀번호를 변경했습니다.");
+    $("newPassword").value = "";
+    $("newPasswordConfirm").value = "";
+    $("passwordChangeBox").style.display = "none";
+  };
+
   async function refreshAuthUi() {
     const { data } = await db.auth.getSession();
     const loggedIn = !!data.session;
     $("signupBox").style.display = "none";
     $("loginBox").style.display = loggedIn ? "none" : "block";
     $("scoreBox").style.display = loggedIn ? "block" : "none";
+    $("passwordChangeBox").style.display = "none";
     if (loggedIn) {
       await ensureMemberRecord();
       await loadMembers();
@@ -1624,6 +1814,7 @@
     if (allVenues.length) renderVenues();
     renderAttendees();
     renderVenueRecommendation();
+    renderGuests();
     if ($("tabMeetupLog").style.display !== "none") renderMeetupLogForm();
     if (allMeetups.length) renderMeetupLogList();
     updateOcrLoginUi();
@@ -1904,7 +2095,11 @@
 
     const wasEditing = !!editingVenueId;
     cancelEditVenue();
-    setStatus(wasEditing ? "볼링장 정보를 수정했습니다." : "볼링장을 등록했습니다.");
+    const dongMatched = !!DONG_COORDS[dong];
+    setStatus(
+      (wasEditing ? "볼링장 정보를 수정했습니다." : "볼링장을 등록했습니다.") +
+      (dongMatched ? "" : " (단, 입력한 동 이름이 좌표 목록에 없어서 지도/거리 추천에는 반영되지 않아요. 동 이름을 다시 확인해주세요.)")
+    );
     await loadVenues();
     renderVenueRecommendation();
   };
@@ -1949,6 +2144,40 @@
     }
     renderAttendees();
     renderVenueRecommendation();
+  }
+
+  // 게스트는 DB에 저장되지 않는 이 화면 전용 임시 참석자입니다. (팀 구성에만 사용, 회원 기록/추천에는 영향 없음)
+  window.addGuest = function () {
+    const input = $("guestNameInput");
+    const name = input.value.trim();
+    if (!name) return;
+    guestList.push({ id: `guest-${++guestSeq}`, name });
+    input.value = "";
+    renderGuests();
+  };
+
+  window.removeGuest = function (id) {
+    guestList = guestList.filter(g => g.id !== id);
+    renderGuests();
+  };
+
+  function renderGuests() {
+    if (!guestList.length) {
+      $("guestArea").innerHTML = `<div class="note">아직 추가된 게스트가 없어요.</div>`;
+      return;
+    }
+    const wrap = document.createElement("div");
+    wrap.className = "attendee-list";
+    guestList.forEach(g => {
+      const chip = document.createElement("div");
+      chip.className = "attendee-chip checked";
+      chip.innerHTML = `🙌 ${escapeHtml(g.name)} <span style="margin-left:4px;opacity:.7;">✕</span>`;
+      chip.title = "클릭하면 게스트 목록에서 제거돼요";
+      chip.addEventListener("click", () => removeGuest(g.id));
+      wrap.appendChild(chip);
+    });
+    $("guestArea").innerHTML = "";
+    $("guestArea").appendChild(wrap);
   }
 
   // 참석자 목록을 기준으로 등록된 모든 볼링장을 거리순으로 정렬해서 돌려주는 공용 함수.
@@ -2007,13 +2236,14 @@
     const attendees = allMembers.filter(m => selectedAttendeeIds.has(m.id));
     const { ranked, noCarCount, unknownCount, NO_CAR_WEIGHT } = computeVenueRanking(attendees);
 
-    const medals = ["🥇", "🥈", "🥉"];
-    const rows = ranked.slice(0, 3).map((v, i) => `
+    const medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
+    const withDist = ranked.filter(v => v.weightedAvgDist != null);
+    const withoutDist = ranked.filter(v => v.weightedAvgDist == null);
+
+    const rows = withDist.slice(0, 5).map((v, i) => `
       <div style="margin-bottom:8px;">
-        <div>${medals[i]} <b>${escapeHtml(v.name)}</b> (${escapeHtml(v.dong)})</div>
-        <div class="sub">${v.weightedAvgDist != null
-          ? `가중 평균 ${v.weightedAvgDist.toFixed(1)}km (단순 평균 ${v.avgDist.toFixed(1)}km)`
-          : "거리 계산 불가 (동 정보 확인 필요)"}</div>
+        <div>${medals[i] || "•"} <b>${escapeHtml(v.name)}</b> (${escapeHtml(v.dong)})</div>
+        <div class="sub">가중 평균 ${v.weightedAvgDist.toFixed(1)}km (단순 평균 ${v.avgDist.toFixed(1)}km)</div>
         ${v.carAvgDist != null || v.noCarAvgDist != null ? `
         <div class="sub">
           ${v.carAvgDist != null ? `🚗 자차 참석자 평균 ${v.carAvgDist.toFixed(1)}km` : "🚗 자차 참석자 없음"}
@@ -2022,10 +2252,17 @@
       </div>
     `).join("");
 
+    // 동 이름이 좌표 목록에 없어서 거리 계산이 안 된 볼링장도 숨기지 않고 따로 보여줌
+    // (새로 등록한 볼링장이 여기 없이 안 보이면 "동" 표기를 다시 확인해달라고 안내)
+    const unmatchedRows = withoutDist.length ? `
+      <div class="note" style="margin-top:10px;">⚠️ 거리 계산이 안 된 볼링장 (동 이름을 목록에 있는 정확한 이름으로 입력하면 계산돼요)</div>
+      ${withoutDist.map(v => `<div class="sub">・ ${escapeHtml(v.name)} (${escapeHtml(v.dong)})</div>`).join("")}
+    ` : "";
+
     const unknownNote = unknownCount ? ` · 동 정보 미입력 ${unknownCount}명` : "";
     const carNote = `<div class="sub" style="margin-top:6px;">🚗 자차 없는 참석자: ${noCarCount}명 / 총 ${attendees.length}명${unknownNote} (자차 없는 회원 거리 ${NO_CAR_WEIGHT}배 가중)</div>`;
 
-    $("venueRecommendArea").innerHTML = rows + carNote;
+    $("venueRecommendArea").innerHTML = (rows || `<div class="empty">거리를 계산할 수 있는 볼링장이 없습니다.</div>`) + unmatchedRows + carNote;
   }
 
   function shuffleArray(arr) {
@@ -2064,7 +2301,7 @@
   }
 
   window.generateTeams = function () {
-    if (!selectedAttendeeIds.size) {
+    if (!selectedAttendeeIds.size && !guestList.length) {
       $("teamArea").innerHTML = `<div class="empty">참석자를 먼저 선택하세요.</div>`;
       return;
     }
@@ -2076,13 +2313,26 @@
       ? stats.reduce((a, s) => a + s.avg, 0) / stats.length
       : 150;
 
-    const players = attendees.map(m => ({
+    const memberPlayers = attendees.map(m => ({
       id: m.id,
       name: m.name,
       nickname: m.nickname,
       avg: statMap.has(m.id) ? statMap.get(m.id) : fallbackAvg,
       hasRecord: statMap.has(m.id),
+      isGuest: false,
     }));
+
+    // 게스트는 점수 기록이 없으니 전체 평균으로 팀 밸런스를 맞춤 (기존 "기록없음 회원" 처리와 동일한 방식)
+    const guestPlayers = guestList.map(g => ({
+      id: g.id,
+      name: g.name,
+      nickname: "",
+      avg: fallbackAvg,
+      hasRecord: false,
+      isGuest: true,
+    }));
+
+    const players = [...memberPlayers, ...guestPlayers];
 
     const sizeSel = $("teamSizeSelect").value;
     const teamSize = sizeSel === "auto"
@@ -2104,7 +2354,7 @@
     const cards = teams.map((t, i) => {
       const avg = t.members.length ? t.total / t.members.length : 0;
       const names = t.members
-        .map(p => memberDisplay(p.name, p.nickname) + (p.hasRecord ? "" : ` <span class="sub">(기록없음)</span>`))
+        .map(p => (p.isGuest ? "🙌 " : "") + memberDisplay(p.name, p.nickname) + (p.hasRecord ? "" : ` <span class="sub">(기록없음)</span>`))
         .join(", ");
       return `
         <div class="venue-card">
@@ -2586,7 +2836,7 @@
   async function loadMeetupLogs() {
     const { data, error } = await db
       .from("bowling_meetups")
-      .select("id,meetup_date,note,venue_id,created_by,created_at,bowling_venues(name,dong),bowling_meetup_attendees(member_id,bowling_members(name,nickname))")
+      .select("id,meetup_date,note,venue_id,venue_name_manual,created_by,created_at,bowling_venues(name,dong),bowling_meetup_attendees(member_id,bowling_members(name,nickname))")
       .order("meetup_date", { ascending: false })
       .order("created_at", { ascending: false });
 
@@ -2603,9 +2853,17 @@
     const sel = $("meetupVenueSelect");
     const prev = sel.value;
     sel.innerHTML = `<option value="">간 볼링장 선택 (선택)</option>` +
-      allVenues.map(v => `<option value="${v.id}">${escapeHtml(v.name)} (${escapeHtml(v.dong)})</option>`).join("");
-    if (prev && allVenues.some(v => v.id === prev)) sel.value = prev;
+      allVenues.map(v => `<option value="${v.id}">${escapeHtml(v.name)} (${escapeHtml(v.dong)})</option>`).join("") +
+      `<option value="__manual__">➕ 목록에 없는 곳 (직접 입력)</option>`;
+    if (prev && (prev === "__manual__" || allVenues.some(v => v.id === prev))) sel.value = prev;
+    onMeetupVenueSelectChange();
   }
+
+  window.onMeetupVenueSelectChange = function () {
+    const isManual = $("meetupVenueSelect").value === "__manual__";
+    $("meetupVenueManual").style.display = isManual ? "block" : "none";
+    if (!isManual) $("meetupVenueManual").value = "";
+  };
 
   window.renderMeetupLogForm = function () {
     if (!$("meetupDate").value) $("meetupDate").value = todayLocal();
@@ -2643,12 +2901,24 @@
     if (!currentUserId) return setStatus("로그인이 필요합니다.");
     const meetupDate = $("meetupDate").value;
     if (!meetupDate) return setStatus("날짜를 선택하세요.");
-    const venueId = $("meetupVenueSelect").value || null;
+
+    const venueSelectValue = $("meetupVenueSelect").value;
+    const isManualVenue = venueSelectValue === "__manual__";
+    const venueId = venueSelectValue && !isManualVenue ? venueSelectValue : null;
+    const venueNameManual = isManualVenue ? $("meetupVenueManual").value.trim() : "";
+    if (isManualVenue && !venueNameManual) return setStatus("직접 입력할 볼링장 이름을 적어주세요.");
+
     const note = $("meetupNote").value.trim() || null;
 
     const { data: meetup, error } = await db
       .from("bowling_meetups")
-      .insert({ meetup_date: meetupDate, venue_id: venueId, note, created_by: currentUserId })
+      .insert({
+        meetup_date: meetupDate,
+        venue_id: venueId,
+        venue_name_manual: venueNameManual || null,
+        note,
+        created_by: currentUserId,
+      })
       .select()
       .single();
 
@@ -2668,6 +2938,7 @@
 
     meetupSelectedIds = new Set();
     $("meetupNote").value = "";
+    $("meetupVenueManual").value = "";
     await loadMeetupLogs();
     renderMeetupLogForm();
   };
@@ -2680,7 +2951,9 @@
     const wrap = document.createElement("div");
     allMeetups.forEach(m => {
       const canDelete = isAdminUser || (currentUserId && m.created_by === currentUserId);
-      const venueLabel = m.bowling_venues ? `${escapeHtml(m.bowling_venues.name)} (${escapeHtml(m.bowling_venues.dong)})` : "장소 미기록";
+      const venueLabel = m.bowling_venues
+        ? `${escapeHtml(m.bowling_venues.name)} (${escapeHtml(m.bowling_venues.dong)})`
+        : (m.venue_name_manual ? `${escapeHtml(m.venue_name_manual)} (미등록)` : "장소 미기록");
       const attendeeNames = (m.bowling_meetup_attendees || [])
         .map(a => a.bowling_members ? escapeHtml(a.bowling_members.nickname || a.bowling_members.name) : null)
         .filter(Boolean)
