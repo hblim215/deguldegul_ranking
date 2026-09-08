@@ -598,6 +598,13 @@
           <h2>🙋 참석자 선택</h2>
           <div class="note" style="margin-bottom:10px;">오늘 참석하는 회원을 클릭해서 선택하세요. (별도로 저장되지 않고, 이 화면에서만 사용돼요)</div>
           <div id="attendeeArea"><div class="empty">회원 목록을 불러오는 중...</div></div>
+
+          <div class="note" style="margin:14px 0 6px;font-weight:700;">🙌 게스트 추가</div>
+          <div class="form-grid" style="grid-template-columns:1fr auto;">
+            <input type="text" id="guestNameInput" placeholder="게스트 이름" onkeydown="if(event.key==='Enter'){event.preventDefault();addGuest();}">
+            <button type="button" class="secondary" style="margin-top:0;" onclick="addGuest()">추가</button>
+          </div>
+          <div id="guestArea" style="margin-top:8px;"></div>
         </div>
 
         <div class="section">
@@ -994,6 +1001,8 @@
   let announceSelectedVenueId = null;
   let growthChart = null;
   let ocrRows = [];
+  let guestList = [];
+  let guestSeq = 0;
   let ocrRowSeq = 0;
   let ocrImageEl = null;
   let ocrCropRect = null;
@@ -1666,6 +1675,7 @@
     if (allVenues.length) renderVenues();
     renderAttendees();
     renderVenueRecommendation();
+    renderGuests();
     if ($("tabMeetupLog").style.display !== "none") renderMeetupLogForm();
     if (allMeetups.length) renderMeetupLogList();
     updateOcrLoginUi();
@@ -1946,7 +1956,11 @@
 
     const wasEditing = !!editingVenueId;
     cancelEditVenue();
-    setStatus(wasEditing ? "볼링장 정보를 수정했습니다." : "볼링장을 등록했습니다.");
+    const dongMatched = !!DONG_COORDS[dong];
+    setStatus(
+      (wasEditing ? "볼링장 정보를 수정했습니다." : "볼링장을 등록했습니다.") +
+      (dongMatched ? "" : " (단, 입력한 동 이름이 좌표 목록에 없어서 지도/거리 추천에는 반영되지 않아요. 동 이름을 다시 확인해주세요.)")
+    );
     await loadVenues();
     renderVenueRecommendation();
   };
@@ -1991,6 +2005,40 @@
     }
     renderAttendees();
     renderVenueRecommendation();
+  }
+
+  // 게스트는 DB에 저장되지 않는 이 화면 전용 임시 참석자입니다. (팀 구성에만 사용, 회원 기록/추천에는 영향 없음)
+  window.addGuest = function () {
+    const input = $("guestNameInput");
+    const name = input.value.trim();
+    if (!name) return;
+    guestList.push({ id: `guest-${++guestSeq}`, name });
+    input.value = "";
+    renderGuests();
+  };
+
+  window.removeGuest = function (id) {
+    guestList = guestList.filter(g => g.id !== id);
+    renderGuests();
+  };
+
+  function renderGuests() {
+    if (!guestList.length) {
+      $("guestArea").innerHTML = `<div class="note">아직 추가된 게스트가 없어요.</div>`;
+      return;
+    }
+    const wrap = document.createElement("div");
+    wrap.className = "attendee-list";
+    guestList.forEach(g => {
+      const chip = document.createElement("div");
+      chip.className = "attendee-chip checked";
+      chip.innerHTML = `🙌 ${escapeHtml(g.name)} <span style="margin-left:4px;opacity:.7;">✕</span>`;
+      chip.title = "클릭하면 게스트 목록에서 제거돼요";
+      chip.addEventListener("click", () => removeGuest(g.id));
+      wrap.appendChild(chip);
+    });
+    $("guestArea").innerHTML = "";
+    $("guestArea").appendChild(wrap);
   }
 
   // 참석자 목록을 기준으로 등록된 모든 볼링장을 거리순으로 정렬해서 돌려주는 공용 함수.
@@ -2049,13 +2097,14 @@
     const attendees = allMembers.filter(m => selectedAttendeeIds.has(m.id));
     const { ranked, noCarCount, unknownCount, NO_CAR_WEIGHT } = computeVenueRanking(attendees);
 
-    const medals = ["🥇", "🥈", "🥉"];
-    const rows = ranked.slice(0, 3).map((v, i) => `
+    const medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
+    const withDist = ranked.filter(v => v.weightedAvgDist != null);
+    const withoutDist = ranked.filter(v => v.weightedAvgDist == null);
+
+    const rows = withDist.slice(0, 5).map((v, i) => `
       <div style="margin-bottom:8px;">
-        <div>${medals[i]} <b>${escapeHtml(v.name)}</b> (${escapeHtml(v.dong)})</div>
-        <div class="sub">${v.weightedAvgDist != null
-          ? `가중 평균 ${v.weightedAvgDist.toFixed(1)}km (단순 평균 ${v.avgDist.toFixed(1)}km)`
-          : "거리 계산 불가 (동 정보 확인 필요)"}</div>
+        <div>${medals[i] || "•"} <b>${escapeHtml(v.name)}</b> (${escapeHtml(v.dong)})</div>
+        <div class="sub">가중 평균 ${v.weightedAvgDist.toFixed(1)}km (단순 평균 ${v.avgDist.toFixed(1)}km)</div>
         ${v.carAvgDist != null || v.noCarAvgDist != null ? `
         <div class="sub">
           ${v.carAvgDist != null ? `🚗 자차 참석자 평균 ${v.carAvgDist.toFixed(1)}km` : "🚗 자차 참석자 없음"}
@@ -2064,10 +2113,17 @@
       </div>
     `).join("");
 
+    // 동 이름이 좌표 목록에 없어서 거리 계산이 안 된 볼링장도 숨기지 않고 따로 보여줌
+    // (새로 등록한 볼링장이 여기 없이 안 보이면 "동" 표기를 다시 확인해달라고 안내)
+    const unmatchedRows = withoutDist.length ? `
+      <div class="note" style="margin-top:10px;">⚠️ 거리 계산이 안 된 볼링장 (동 이름을 목록에 있는 정확한 이름으로 입력하면 계산돼요)</div>
+      ${withoutDist.map(v => `<div class="sub">・ ${escapeHtml(v.name)} (${escapeHtml(v.dong)})</div>`).join("")}
+    ` : "";
+
     const unknownNote = unknownCount ? ` · 동 정보 미입력 ${unknownCount}명` : "";
     const carNote = `<div class="sub" style="margin-top:6px;">🚗 자차 없는 참석자: ${noCarCount}명 / 총 ${attendees.length}명${unknownNote} (자차 없는 회원 거리 ${NO_CAR_WEIGHT}배 가중)</div>`;
 
-    $("venueRecommendArea").innerHTML = rows + carNote;
+    $("venueRecommendArea").innerHTML = (rows || `<div class="empty">거리를 계산할 수 있는 볼링장이 없습니다.</div>`) + unmatchedRows + carNote;
   }
 
   function shuffleArray(arr) {
@@ -2106,7 +2162,7 @@
   }
 
   window.generateTeams = function () {
-    if (!selectedAttendeeIds.size) {
+    if (!selectedAttendeeIds.size && !guestList.length) {
       $("teamArea").innerHTML = `<div class="empty">참석자를 먼저 선택하세요.</div>`;
       return;
     }
@@ -2118,13 +2174,26 @@
       ? stats.reduce((a, s) => a + s.avg, 0) / stats.length
       : 150;
 
-    const players = attendees.map(m => ({
+    const memberPlayers = attendees.map(m => ({
       id: m.id,
       name: m.name,
       nickname: m.nickname,
       avg: statMap.has(m.id) ? statMap.get(m.id) : fallbackAvg,
       hasRecord: statMap.has(m.id),
+      isGuest: false,
     }));
+
+    // 게스트는 점수 기록이 없으니 전체 평균으로 팀 밸런스를 맞춤 (기존 "기록없음 회원" 처리와 동일한 방식)
+    const guestPlayers = guestList.map(g => ({
+      id: g.id,
+      name: g.name,
+      nickname: "",
+      avg: fallbackAvg,
+      hasRecord: false,
+      isGuest: true,
+    }));
+
+    const players = [...memberPlayers, ...guestPlayers];
 
     const sizeSel = $("teamSizeSelect").value;
     const teamSize = sizeSel === "auto"
@@ -2146,7 +2215,7 @@
     const cards = teams.map((t, i) => {
       const avg = t.members.length ? t.total / t.members.length : 0;
       const names = t.members
-        .map(p => memberDisplay(p.name, p.nickname) + (p.hasRecord ? "" : ` <span class="sub">(기록없음)</span>`))
+        .map(p => (p.isGuest ? "🙌 " : "") + memberDisplay(p.name, p.nickname) + (p.hasRecord ? "" : ` <span class="sub">(기록없음)</span>`))
         .join(", ");
       return `
         <div class="venue-card">
@@ -2819,63 +2888,3 @@
       const distLabel = v.weightedAvgDist != null ? ` · ${v.weightedAvgDist.toFixed(1)}km` : "";
       chip.textContent = `${i === 0 ? "🥇 " : ""}${v.name} (${v.dong})${distLabel}`;
       chip.addEventListener("click", () => {
-        announceSelectedVenueId = v.id;
-        renderAnnounceVenueOptions();
-      });
-      wrap.appendChild(chip);
-    });
-    $("announceVenueArea").innerHTML = "";
-    $("announceVenueArea").appendChild(wrap);
-  };
-
-  window.generateAnnouncement = function () {
-    const date = $("announceDate").value;
-    if (!date) return setStatus("날짜를 선택하세요.");
-    if (!announceSelectedIds.size) return setStatus("참여자를 선택하세요.");
-    if (!announceSelectedVenueId) return setStatus("추천 장소 중 하나를 선택하세요.");
-
-    const time = $("announceTime").value.trim();
-    const venue = allVenues.find(v => v.id === announceSelectedVenueId);
-    const attendees = allMembers.filter(m => announceSelectedIds.has(m.id));
-    const names = attendees.map(m => m.nickname || m.name).join(", ");
-
-    const lines = [
-      "🎳 데굴데굴 볼링 모임 공지",
-      "",
-      `📅 날짜: ${date}`,
-      time ? `⏰ 집합 시간: ${time}` : null,
-      `📍 장소: ${venue.name} (${venue.dong})${venue.address ? " - " + venue.address : ""}`,
-      `🙋 참여자 (${attendees.length}명): ${names}`,
-      "",
-      "즐거운 볼링 시간 되어요! 🎉",
-    ].filter(v => v !== null);
-
-    $("announceResultText").value = lines.join("\n");
-    $("announceResultBox").style.display = "block";
-    setStatus("모임 공지를 생성했습니다.");
-  };
-
-  window.copyAnnouncement = async function () {
-    const text = $("announceResultText").value;
-    try {
-      await navigator.clipboard.writeText(text);
-      setStatus("공지 내용을 복사했습니다. 게시판에 붙여넣으세요!");
-    } catch (e) {
-      $("announceResultText").select();
-      setStatus("자동 복사에 실패했어요. 텍스트를 직접 선택해서 복사해주세요.");
-    }
-  };
-
-  db.auth.onAuthStateChange(() => refreshAuthUi());
-
-  populateDongSelects();
-
-  await loadMembers();
-  await refreshAuthUi();
-  await loadScores();
-  await loadComments();
-  await loadVenues();
-  await loadMeetupLogs();
-</script>
-</body>
-</html>
