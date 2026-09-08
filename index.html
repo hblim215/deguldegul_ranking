@@ -719,8 +719,11 @@
       <div id="meetupWriteBox">
         <div class="form-grid">
           <input type="date" id="meetupDate">
-          <select id="meetupVenueSelect"><option value="">간 볼링장 선택 (선택)</option></select>
+          <select id="meetupVenueSelect" onchange="onMeetupVenueSelectChange()">
+            <option value="">간 볼링장 선택 (선택)</option>
+          </select>
         </div>
+        <input type="text" id="meetupVenueManual" placeholder="볼링장 이름 직접 입력" style="display:none;margin-top:8px;">
         <div class="note" style="margin:10px 0 4px;font-weight:700;">참여자</div>
         <div id="meetupAttendeeArea"><div class="empty">회원 목록을 불러오는 중...</div></div>
         <textarea id="meetupNote" rows="2" placeholder="메모 (선택)" style="margin-top:10px;"></textarea>
@@ -2574,7 +2577,7 @@
   async function loadMeetupLogs() {
     const { data, error } = await db
       .from("bowling_meetups")
-      .select("id,meetup_date,note,venue_id,created_by,created_at,bowling_venues(name,dong),bowling_meetup_attendees(member_id,bowling_members(name,nickname))")
+      .select("id,meetup_date,note,venue_id,venue_name_manual,created_by,created_at,bowling_venues(name,dong),bowling_meetup_attendees(member_id,bowling_members(name,nickname))")
       .order("meetup_date", { ascending: false })
       .order("created_at", { ascending: false });
 
@@ -2591,9 +2594,17 @@
     const sel = $("meetupVenueSelect");
     const prev = sel.value;
     sel.innerHTML = `<option value="">간 볼링장 선택 (선택)</option>` +
-      allVenues.map(v => `<option value="${v.id}">${escapeHtml(v.name)} (${escapeHtml(v.dong)})</option>`).join("");
-    if (prev && allVenues.some(v => v.id === prev)) sel.value = prev;
+      allVenues.map(v => `<option value="${v.id}">${escapeHtml(v.name)} (${escapeHtml(v.dong)})</option>`).join("") +
+      `<option value="__manual__">➕ 목록에 없는 곳 (직접 입력)</option>`;
+    if (prev && (prev === "__manual__" || allVenues.some(v => v.id === prev))) sel.value = prev;
+    onMeetupVenueSelectChange();
   }
+
+  window.onMeetupVenueSelectChange = function () {
+    const isManual = $("meetupVenueSelect").value === "__manual__";
+    $("meetupVenueManual").style.display = isManual ? "block" : "none";
+    if (!isManual) $("meetupVenueManual").value = "";
+  };
 
   window.renderMeetupLogForm = function () {
     if (!$("meetupDate").value) $("meetupDate").value = todayLocal();
@@ -2631,12 +2642,24 @@
     if (!currentUserId) return setStatus("로그인이 필요합니다.");
     const meetupDate = $("meetupDate").value;
     if (!meetupDate) return setStatus("날짜를 선택하세요.");
-    const venueId = $("meetupVenueSelect").value || null;
+
+    const venueSelectValue = $("meetupVenueSelect").value;
+    const isManualVenue = venueSelectValue === "__manual__";
+    const venueId = venueSelectValue && !isManualVenue ? venueSelectValue : null;
+    const venueNameManual = isManualVenue ? $("meetupVenueManual").value.trim() : "";
+    if (isManualVenue && !venueNameManual) return setStatus("직접 입력할 볼링장 이름을 적어주세요.");
+
     const note = $("meetupNote").value.trim() || null;
 
     const { data: meetup, error } = await db
       .from("bowling_meetups")
-      .insert({ meetup_date: meetupDate, venue_id: venueId, note, created_by: currentUserId })
+      .insert({
+        meetup_date: meetupDate,
+        venue_id: venueId,
+        venue_name_manual: venueNameManual || null,
+        note,
+        created_by: currentUserId,
+      })
       .select()
       .single();
 
@@ -2656,6 +2679,7 @@
 
     meetupSelectedIds = new Set();
     $("meetupNote").value = "";
+    $("meetupVenueManual").value = "";
     await loadMeetupLogs();
     renderMeetupLogForm();
   };
@@ -2668,7 +2692,9 @@
     const wrap = document.createElement("div");
     allMeetups.forEach(m => {
       const canDelete = isAdminUser || (currentUserId && m.created_by === currentUserId);
-      const venueLabel = m.bowling_venues ? `${escapeHtml(m.bowling_venues.name)} (${escapeHtml(m.bowling_venues.dong)})` : "장소 미기록";
+      const venueLabel = m.bowling_venues
+        ? `${escapeHtml(m.bowling_venues.name)} (${escapeHtml(m.bowling_venues.dong)})`
+        : (m.venue_name_manual ? `${escapeHtml(m.venue_name_manual)} (미등록)` : "장소 미기록");
       const attendeeNames = (m.bowling_meetup_attendees || [])
         .map(a => a.bowling_members ? escapeHtml(a.bowling_members.nickname || a.bowling_members.name) : null)
         .filter(Boolean)
