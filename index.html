@@ -648,7 +648,7 @@
       <div id="ocrPreviewWrap" style="display:none;margin-top:10px;">
         <div class="note" style="margin-bottom:6px;">사진에서 <b>점수표(특히 총점 칸)만 드래그</b>해서 선택하면 그 부분만 인식해요. 선택하지 않으면 사진 전체를 인식합니다.</div>
         <div style="max-width:100%;">
-          <canvas id="ocrCropCanvas" style="max-width:100%;border-radius:10px;display:block;touch-action:none;"></canvas>
+          <canvas id="ocrCropCanvas" style="max-width:100%;border-radius:10px;display:block;touch-action:none;cursor:crosshair;"></canvas>
         </div>
         <button type="button" class="ghost" onclick="resetOcrCrop()" style="margin-top:8px;">영역 선택 초기화</button>
       </div>
@@ -2138,6 +2138,8 @@
       return setStatus("점수는 0~300 사이 정수만 입력할 수 있습니다.");
     }
 
+    if (!confirm("정말 본인의 기록이 맞나요?\n오기입 시 데굴데굴 룰에 의거하여 처벌받을 수 있습니다.")) return;
+
     const payload = scores.map(score => ({
       member_id: memberId,
       score,
@@ -2176,12 +2178,13 @@
     img.onload = () => {
       ocrImageEl = img;
       ocrCropRect = null;
-      drawOcrCropCanvas();
-      bindOcrCropEvents();
+      // 컨테이너 너비를 정확히 재기 위해 먼저 보이게 한 다음 캔버스를 그림
       $("ocrPreviewWrap").style.display = "block";
       $("ocrRunBtn").disabled = false;
       $("ocrResultBox").style.display = "none";
       ocrRows = [];
+      drawOcrCropCanvas();
+      bindOcrCropEvents();
     };
     img.onerror = () => setStatus("이미지를 불러오지 못했습니다.");
     img.src = URL.createObjectURL(file);
@@ -2194,6 +2197,9 @@
     const scale = Math.min(1, maxW / ocrImageEl.width);
     canvas.width = Math.round(ocrImageEl.width * scale);
     canvas.height = Math.round(ocrImageEl.height * scale);
+    // CSS 렌더 크기를 내부 픽셀 크기와 동일하게 고정 (좌표 계산이 어긋나지 않도록)
+    canvas.style.width = canvas.width + "px";
+    canvas.style.height = canvas.height + "px";
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(ocrImageEl, 0, 0, canvas.width, canvas.height);
@@ -2210,25 +2216,31 @@
   function getOcrCanvasPoint(e) {
     const canvas = $("ocrCropCanvas");
     const rect = canvas.getBoundingClientRect();
-    const point = e.touches && e.touches.length ? e.touches[0] : e;
+    // CSS 렌더 크기와 내부 캔버스 픽셀 크기가 달라도(모바일 배율 등) 안전하게 매핑
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
     return {
-      x: Math.max(0, Math.min(canvas.width, point.clientX - rect.left)),
-      y: Math.max(0, Math.min(canvas.height, point.clientY - rect.top)),
+      x: Math.max(0, Math.min(canvas.width, (e.clientX - rect.left) * scaleX)),
+      y: Math.max(0, Math.min(canvas.height, (e.clientY - rect.top) * scaleY)),
     };
   }
 
+  // 마우스/터치를 각각 따로 처리하면 좌표나 타이밍이 어긋나기 쉬워서,
+  // 마우스·터치·펜을 하나로 통합해서 다루는 Pointer Events로 처리합니다.
   function bindOcrCropEvents() {
     if (ocrCropEventsBound) return;
     ocrCropEventsBound = true;
     const canvas = $("ocrCropCanvas");
 
-    const start = (e) => {
+    canvas.addEventListener("pointerdown", (e) => {
       e.preventDefault();
+      canvas.setPointerCapture(e.pointerId);
       ocrCropDragging = true;
       ocrCropStart = getOcrCanvasPoint(e);
       ocrCropRect = { x: ocrCropStart.x, y: ocrCropStart.y, w: 0, h: 0 };
-    };
-    const move = (e) => {
+      drawOcrCropCanvas();
+    });
+    canvas.addEventListener("pointermove", (e) => {
       if (!ocrCropDragging) return;
       e.preventDefault();
       const p = getOcrCanvasPoint(e);
@@ -2239,15 +2251,10 @@
         h: Math.abs(p.y - ocrCropStart.y),
       };
       drawOcrCropCanvas();
-    };
-    const end = () => { ocrCropDragging = false; };
-
-    canvas.addEventListener("mousedown", start);
-    canvas.addEventListener("mousemove", move);
-    window.addEventListener("mouseup", end);
-    canvas.addEventListener("touchstart", start, { passive: false });
-    canvas.addEventListener("touchmove", move, { passive: false });
-    canvas.addEventListener("touchend", end);
+    });
+    const endDrag = () => { ocrCropDragging = false; };
+    canvas.addEventListener("pointerup", endDrag);
+    canvas.addEventListener("pointercancel", endDrag);
   }
 
   window.resetOcrCrop = function () {
@@ -2440,6 +2447,8 @@
 
     if (!payload.length) return setStatus("저장할 항목이 없습니다. 회원과 점수를 확인해주세요.");
 
+    if (!confirm("정말 본인의 기록이 맞나요?\n오기입 시 데굴데굴 룰에 의거하여 처벌받을 수 있습니다.")) return;
+
     setStatus("저장 중...");
     const { error } = await db.from("bowling_scores").insert(payload);
     if (error) return setStatus("저장 실패: " + error.message);
@@ -2500,6 +2509,9 @@
       return +(slice.reduce((a, b) => a + b, 0) / slice.length).toFixed(1);
     });
 
+    // 게임 수가 적을 때는 점 크기를 키워서 그래프가 잘 보이게 함
+    const sparse = games < 5;
+
     if (growthChart) growthChart.destroy();
     growthChart = new Chart($("growthCanvas"), {
       type: "line",
@@ -2512,7 +2524,7 @@
             borderColor: "#b9c3b5",
             backgroundColor: "rgba(47,125,60,0.08)",
             borderWidth: 1.5,
-            pointRadius: 2,
+            pointRadius: sparse ? 4 : 2,
             tension: 0.2,
           },
           {
@@ -2520,7 +2532,7 @@
             data: movingAvg,
             borderColor: "#2f7d3c",
             borderWidth: 2.5,
-            pointRadius: 0,
+            pointRadius: sparse ? 3 : 0,
             tension: 0.25,
           },
         ],
