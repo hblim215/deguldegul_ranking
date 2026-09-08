@@ -543,7 +543,18 @@
       </div>
       <button class="primary" onclick="addScores()">점수 등록</button>
       <button class="secondary" onclick="logout()">로그아웃</button>
+      <button class="secondary" onclick="togglePasswordChangeBox()">비밀번호 변경</button>
       <div class="note">1~3게임 중 실제 진행한 게임만 입력하면 됩니다. 0~300점만 등록됩니다.</div>
+
+      <div id="passwordChangeBox" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid #e5e8e3;">
+        <h3 style="margin:0 0 10px;font-size:15px;">🔒 비밀번호 변경</h3>
+        <div class="form-grid">
+          <input type="password" id="newPassword" placeholder="새 비밀번호 (6자 이상)">
+          <input type="password" id="newPasswordConfirm" placeholder="새 비밀번호 확인">
+        </div>
+        <button class="primary" onclick="changePassword()">변경하기</button>
+        <button class="secondary" onclick="togglePasswordChangeBox()">취소</button>
+      </div>
     </div>
 
     <div class="status" id="status"></div>
@@ -1609,12 +1620,40 @@
     await refreshAuthUi();
   };
 
+  window.togglePasswordChangeBox = function () {
+    const box = $("passwordChangeBox");
+    const show = box.style.display === "none";
+    box.style.display = show ? "block" : "none";
+    if (show) {
+      $("newPassword").value = "";
+      $("newPasswordConfirm").value = "";
+    }
+  };
+
+  window.changePassword = async function () {
+    const pw = $("newPassword").value;
+    const pwConfirm = $("newPasswordConfirm").value;
+
+    if (!pw || pw.length < 6) return setStatus("비밀번호는 6자 이상이어야 합니다.");
+    if (pw !== pwConfirm) return setStatus("새 비밀번호가 서로 일치하지 않습니다.");
+
+    setStatus("비밀번호를 변경하는 중...");
+    const { error } = await db.auth.updateUser({ password: pw });
+    if (error) return setStatus("비밀번호 변경 실패: " + error.message);
+
+    setStatus("비밀번호를 변경했습니다.");
+    $("newPassword").value = "";
+    $("newPasswordConfirm").value = "";
+    $("passwordChangeBox").style.display = "none";
+  };
+
   async function refreshAuthUi() {
     const { data } = await db.auth.getSession();
     const loggedIn = !!data.session;
     $("signupBox").style.display = "none";
     $("loginBox").style.display = loggedIn ? "none" : "block";
     $("scoreBox").style.display = loggedIn ? "block" : "none";
+    $("passwordChangeBox").style.display = "none";
     if (loggedIn) {
       await ensureMemberRecord();
       await loadMembers();
