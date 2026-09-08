@@ -457,7 +457,7 @@
       <div class="section side-card">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px;">
           <span style="font-size:12px;color:#6d746d;font-weight:700;">🏅 하이라이트 기준</span>
-          <select id="highlightPeriodToggle" onchange="renderMonthlyHighlights(allRows)" style="width:auto;padding:5px 8px;font-size:12px;">
+          <select id="highlightPeriodToggle" onchange="onHighlightPeriodChange()" style="width:auto;padding:5px 8px;font-size:12px;">
             <option value="month">이번 달</option>
             <option value="all">전체 기록</option>
           </select>
@@ -1420,6 +1420,18 @@
     sel.value = [...sel.options].some(o => o.value === prevValue) ? prevValue : "all";
   }
 
+  function populateHighlightPeriodOptions(rows) {
+    const sel = $("highlightPeriodToggle");
+    const prevValue = sel.value || "month";
+    const months = [...new Set(rows.map(r => (r.played_at || "").slice(0, 7)).filter(Boolean))]
+      .sort((a, b) => b.localeCompare(a));
+
+    sel.innerHTML = `<option value="month">이번 달</option><option value="all">전체 기록</option>` +
+      months.map(m => `<option value="${m}">${m}</option>`).join("");
+
+    sel.value = [...sel.options].some(o => o.value === prevValue) ? prevValue : "month";
+  }
+
   function renderRankingTable(rows) {
     const filterVal = $("rankMonthFilter").value || "all";
     const filtered = filterVal === "all"
@@ -1458,6 +1470,16 @@
     renderRankingTable(allRows);
   };
 
+  window.onHighlightPeriodChange = function () {
+    renderMonthlyHighlights(allRows);
+  };
+
+  function getPrevMonthKey(monthKey) {
+    const [y, m] = monthKey.split("-").map(Number);
+    const d = new Date(y, m - 2, 1); // m은 1~12, Date의 month는 0-index라 -2 하면 "전달"이 됨
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  }
+
   window.renderMonthlyHighlights = function (rows) {
     const mode = $("highlightPeriodToggle") ? $("highlightPeriodToggle").value : "month";
 
@@ -1466,37 +1488,38 @@
       return;
     }
 
-    $("monthAvgLabel").textContent = "🗓 이달의 AVG 1위";
-    $("monthImproveLabel").textContent = "📈 이달의 상승률 1위";
-    $("monthGamesLabel").textContent = "🎯 이달의 경기수 1위";
-
     const now = new Date();
-    const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
+    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const targetMonth = mode === "month" ? currentMonthKey : mode;
+    const isCurrentMonth = targetMonth === currentMonthKey;
 
-    const thisMonthRows = rows.filter(r => (r.played_at || "").slice(0, 7) === thisMonth);
+    $("monthAvgLabel").textContent = isCurrentMonth ? "🗓 이달의 AVG 1위" : `🗓 ${targetMonth} AVG 1위`;
+    $("monthImproveLabel").textContent = isCurrentMonth ? "📈 이달의 상승률 1위" : `📈 ${targetMonth} 상승률 1위`;
+    $("monthGamesLabel").textContent = isCurrentMonth ? "🎯 이달의 경기수 1위" : `🎯 ${targetMonth} 경기수 1위`;
+
+    const prevMonth = getPrevMonthKey(targetMonth);
+    const targetRows = rows.filter(r => (r.played_at || "").slice(0, 7) === targetMonth);
     const prevMonthRows = rows.filter(r => (r.played_at || "").slice(0, 7) === prevMonth);
 
-    if (!thisMonthRows.length) {
-      const emptyMsg = `<span style="font-size:13px;color:#8a908a;">이달 기록 없음</span>`;
+    if (!targetRows.length) {
+      const emptyMsg = `<span style="font-size:13px;color:#8a908a;">해당 월 기록 없음</span>`;
       $("monthAvgLeader").innerHTML = emptyMsg;
       $("monthGamesLeader").innerHTML = emptyMsg;
       $("monthImproveLeader").innerHTML = emptyMsg;
       return;
     }
 
-    const thisStats = computeStats(thisMonthRows);
+    const targetStats = computeStats(targetRows);
 
     $("monthAvgLeader").innerHTML =
-      `${memberDisplay(thisStats[0].name, thisStats[0].nickname)}<div class="sub">AVG ${thisStats[0].avg.toFixed(1)}</div>`;
+      `${memberDisplay(targetStats[0].name, targetStats[0].nickname)}<div class="sub">AVG ${targetStats[0].avg.toFixed(1)}</div>`;
 
-    const gamesLeader = [...thisStats].sort((a, b) => b.games - a.games)[0];
+    const gamesLeader = [...targetStats].sort((a, b) => b.games - a.games)[0];
     $("monthGamesLeader").innerHTML =
       `${memberDisplay(gamesLeader.name, gamesLeader.nickname)}<div class="sub">${gamesLeader.games}게임</div>`;
 
     if (!prevMonthRows.length) {
-      $("monthImproveLeader").innerHTML = `<span style="font-size:13px;color:#8a908a;">비교할 지난달 기록 없음</span>`;
+      $("monthImproveLeader").innerHTML = `<span style="font-size:13px;color:#8a908a;">비교할 이전 달 기록 없음</span>`;
       return;
     }
 
@@ -1504,7 +1527,7 @@
     const prevMap = new Map(prevStats.map(s => [s.memberId, s.avg]));
 
     let best = null;
-    for (const s of thisStats) {
+    for (const s of targetStats) {
       if (!prevMap.has(s.memberId)) continue;
       const prevAvg = prevMap.get(s.memberId);
       if (prevAvg <= 0) continue;
@@ -1681,6 +1704,7 @@
       `${memberDisplay(overallStats[0].name, overallStats[0].nickname)} <span style="font-size:14px;font-weight:700;">${overallStats[0].avg.toFixed(1)}</span>`;
 
     populateMonthFilter(rows);
+    populateHighlightPeriodOptions(rows);
     renderRankingTable(rows);
     renderMonthlyHighlights(rows);
     renderRecentTable(rows);
