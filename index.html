@@ -2786,6 +2786,13 @@
     // 게임 수가 적을 때는 점 크기를 키워서 그래프가 잘 보이게 함
     const sparse = games < 5;
 
+    // 점수 변동이 잘 보이도록 실제 점수 범위에 맞춰 y축을 확대
+    const dataMin = Math.min(...scores);
+    const dataMax = Math.max(...scores);
+    const pad = Math.max(10, Math.round((dataMax - dataMin) * 0.2));
+    const yMin = Math.max(0, Math.floor((dataMin - pad) / 10) * 10);
+    const yMax = Math.min(300, Math.ceil((dataMax + pad) / 10) * 10);
+
     if (growthChart) growthChart.destroy();
     growthChart = new Chart($("growthCanvas"), {
       type: "line",
@@ -2814,7 +2821,7 @@
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        scales: { y: { suggestedMin: 0, suggestedMax: 300 } },
+        scales: { y: { min: yMin, max: yMax } },
         plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } } },
       },
     });
