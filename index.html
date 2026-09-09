@@ -552,6 +552,7 @@
     <div id="scoreBox" style="display:none;">
       <div class="form-grid">
         <select id="memberSelect"></select>
+        <div id="myScoreMemberLabel" class="note" style="display:none;align-self:center;font-weight:800;color:#2f7d3c;"></div>
         <input type="date" id="playedAt">
       </div>
       <div class="scores">
@@ -997,7 +998,24 @@
     ).join("");
     if (prevGrowth && allMembers.some(m => m.id === prevGrowth)) growthSel.value = prevGrowth;
 
+    updateScoreMemberUi();
     renderVenueMap();
+  }
+
+  // 관리자가 아니면 본인 기록만 등록할 수 있도록 회원 선택을 숨기고 고정함
+  function updateScoreMemberUi() {
+    const sel = $("memberSelect");
+    const label = $("myScoreMemberLabel");
+    if (!isAdminUser && myMemberId) {
+      const me = allMembers.find(m => m.id === myMemberId);
+      sel.style.display = "none";
+      sel.value = myMemberId;
+      label.style.display = "flex";
+      label.textContent = me ? (me.nickname ? `${me.nickname} (${me.name})` : me.name) : "본인 기록";
+    } else {
+      sel.style.display = "";
+      label.style.display = "none";
+    }
   }
 
   let allRows = [];
@@ -1728,7 +1746,12 @@
     }
 
     const high = Math.max(...rows.map(r => r.score));
-    $("clubHigh").textContent = high;
+    const highHolders = [...new Set(
+      rows.filter(r => r.score === high)
+        .map(r => memberDisplay(r.bowling_members?.name, r.bowling_members?.nickname))
+    )];
+    $("clubHigh").innerHTML =
+      `${high} <span style="font-size:14px;font-weight:700;">${highHolders.join(", ")}</span>`;
 
     const overallStats = computeStats(rows);
     $("avgLeader").innerHTML =
@@ -1807,6 +1830,7 @@
       await loadMembers();
     }
     await refreshPermissions();
+    updateScoreMemberUi();
     if (allRows.length) renderDashboard(allRows);
     updateCommentWriteUi();
     if (allComments.length) renderComments(allComments);
