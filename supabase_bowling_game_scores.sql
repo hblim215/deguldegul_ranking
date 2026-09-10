@@ -17,10 +17,21 @@ create policy "bowling_game_scores_select_all"
   for select
   using (true);
 
--- 로그인한 사용자는 누구든(재미로 하는 미니게임이라 본인 계정이 아닌
--- 다른 회원을 골라 대신 기록해도 되도록) 점수를 등록할 수 있음
+-- 로그인한 사용자는 자기 자신에 연결된 회원(member)의 기록만 등록할 수 있음.
+-- 단, 관리자(bowling_admins)는 다른 회원의 기록도 대신 등록할 수 있음.
 drop policy if exists "bowling_game_scores_insert_authenticated" on public.bowling_game_scores;
-create policy "bowling_game_scores_insert_authenticated"
+drop policy if exists "bowling_game_scores_insert_own" on public.bowling_game_scores;
+create policy "bowling_game_scores_insert_own"
   on public.bowling_game_scores
   for insert
-  with check (auth.uid() is not null);
+  with check (
+    exists (
+      select 1 from public.bowling_members m
+      where m.id = member_id
+        and m.user_id = auth.uid()
+    )
+    or exists (
+      select 1 from public.bowling_admins a
+      where a.user_id = auth.uid()
+    )
+  );

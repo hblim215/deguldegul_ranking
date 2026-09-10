@@ -921,6 +921,8 @@
         <div>
           <label class="field-label">플레이어</label>
           <select id="bgPlayerSelect"></select>
+          <div id="bgPlayerLabel" class="note" style="display:none;font-weight:800;color:#2f7d3c;"></div>
+          <div id="bgPlayerLoginNotice" class="note" style="display:none;">로그인하면 본인 기록으로 랭킹에 남길 수 있어요. (로그인 없이도 플레이는 가능해요)</div>
         </div>
         <div>
           <label class="field-label">공 무게 (파운드)</label>
@@ -2105,6 +2107,7 @@
     }
     await refreshPermissions();
     updateScoreMemberUi();
+    updateBowlingPlayerUi();
     if (allRows.length) renderDashboard(allRows);
     updateCommentWriteUi();
     if (allComments.length) renderComments(allComments);
@@ -3594,6 +3597,36 @@
     } else if (myMemberId && allMembers.some(m => m.id === myMemberId)) {
       sel.value = myMemberId;
     }
+    updateBowlingPlayerUi();
+  }
+
+  // 관리자가 아니면 본인 기록만 랭킹에 남길 수 있도록 플레이어 선택을 숨기고 고정함
+  function updateBowlingPlayerUi() {
+    const sel = $("bgPlayerSelect");
+    const label = $("bgPlayerLabel");
+    const notice = $("bgPlayerLoginNotice");
+    if (!sel || !label || !notice) return;
+
+    if (!currentUserId) {
+      sel.style.display = "none";
+      label.style.display = "none";
+      notice.style.display = "block";
+      return;
+    }
+    notice.style.display = "none";
+
+    if (!isAdminUser && myMemberId) {
+      const me = allMembers.find(m => m.id === myMemberId);
+      sel.style.display = "none";
+      sel.value = myMemberId;
+      label.style.display = "block";
+      label.textContent = me
+        ? `${memberAnimal(myMemberId)} ${me.nickname ? `${me.nickname} (${me.name})` : me.name}`
+        : "본인 기록";
+    } else {
+      sel.style.display = "";
+      label.style.display = "none";
+    }
   }
 
   function bowlingScoreTotal(rolls) {
@@ -3965,6 +3998,7 @@
 
     if (bgGameOver) {
       msg = `🏁 게임 종료! 최종 점수 ${bowlingScoreTotal(bgRolls)}점`;
+      if (!currentUserId) msg += " (로그인하면 랭킹에 기록돼요)";
       bowlingSaveScore();
     }
 
@@ -4002,6 +4036,7 @@
   }
 
   async function bowlingSaveScore() {
+    if (!currentUserId) return; // 로그인해야 기록이 저장됨
     const memberId = $("bgPlayerSelect").value;
     if (!memberId) return;
     const score = bowlingScoreTotal(bgRolls);
