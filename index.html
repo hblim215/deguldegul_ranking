@@ -915,9 +915,28 @@
   <div id="tabBowlingGame" style="display:none;">
     <div class="section">
       <h2>🎮 볼링 연습 게임</h2>
-      <div class="note" style="margin-bottom:12px;">방향을 맞추고 파워 게이지가 원하는 지점에 왔을 때 다시 눌러서 굴려보세요. 실제 볼링처럼 10프레임 룰로 점수가 계산돼요.</div>
-      <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;">
-        <canvas id="bowlingCanvas" width="300" height="420" style="background:#241a12;border-radius:12px;max-width:100%;"></canvas>
+      <div class="note" style="margin-bottom:12px;">공을 <b>클릭(또는 터치)한 채 뒤로 당겼다가 놓으면</b> 새총처럼 반대 방향으로 굴러가요. 많이 당길수록 강하게 굴러갑니다. 실제 볼링처럼 10프레임 룰로 점수가 계산돼요.</div>
+
+      <div class="form-grid">
+        <div>
+          <label class="field-label">플레이어</label>
+          <select id="bgPlayerSelect"></select>
+        </div>
+        <div>
+          <label class="field-label">공 무게 (파운드)</label>
+          <select id="bgWeight" onchange="bowlingOnWeightChange()">
+            <option value="8">8lb (가볍고 잘 휘어짐)</option>
+            <option value="10">10lb</option>
+            <option value="12">12lb</option>
+            <option value="14" selected>14lb (기본)</option>
+            <option value="15">15lb</option>
+            <option value="16">16lb (무겁고 강력함)</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;margin-top:14px;">
+        <canvas id="bowlingCanvas" width="300" height="420" style="background:#241a12;border-radius:12px;max-width:100%;touch-action:none;"></canvas>
         <div style="flex:1;min-width:220px;">
           <div class="grid" style="grid-template-columns:repeat(3,1fr);">
             <div class="card"><div class="label">프레임</div><div class="value" id="bgFrame">1</div></div>
@@ -925,22 +944,29 @@
             <div class="card"><div class="label">총점</div><div class="value" id="bgScore">0</div></div>
           </div>
 
-          <div class="note" style="font-weight:700;margin:16px 0 6px;">🎯 방향</div>
-          <input type="range" id="bgAim" min="-40" max="40" value="0" style="width:100%;">
-
-          <div class="note" style="font-weight:700;margin:16px 0 6px;">⚡ 파워</div>
+          <div class="note" style="font-weight:700;margin:16px 0 6px;">⚡ 당긴 힘</div>
           <div style="height:18px;border-radius:9px;background:#e5e8e3;overflow:hidden;">
             <div id="bgPowerBar" style="height:100%;width:0%;background:#2f7d3c;"></div>
           </div>
 
-          <button class="primary" id="bgRollBtn" style="margin-top:16px;width:100%;" onclick="bowlingHandleRollButton()">🎳 굴리기</button>
-          <button class="secondary" style="width:100%;" onclick="bowlingStartGame()">🔄 새 게임</button>
+          <button class="secondary" style="width:100%;margin-top:16px;" onclick="bowlingStartGame()">🔄 새 게임</button>
           <div id="bgResultMsg" class="note" style="margin-top:10px;font-weight:800;min-height:18px;"></div>
         </div>
       </div>
 
       <div style="margin-top:18px;overflow-x:auto;">
         <div id="bgFrameStrip" style="display:flex;gap:6px;min-width:600px;"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>🏆 볼링 게임 랭킹</h2>
+      <div class="note" style="margin-bottom:10px;">각 회원의 이 게임 최고 점수를 이 브라우저에 기록해 보여줘요. (다른 기기와는 공유되지 않아요)</div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>순위</th><th>회원</th><th>최고 점수</th></tr></thead>
+          <tbody id="bgLeaderboardBody"><tr><td colspan="3" class="empty">아직 기록이 없습니다.</td></tr></tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -1163,6 +1189,7 @@
 
     populateGrowthSelect();
     populateCompareChecks();
+    populateBowlingPlayerSelect();
     updateScoreMemberUi();
     renderVenueMap();
   }
@@ -1941,6 +1968,7 @@
     if (allMembers.length) {
       populateGrowthSelect();
       populateCompareChecks();
+      populateBowlingPlayerSelect();
     }
 
     if (!rows.length) {
@@ -3496,6 +3524,8 @@
   const BG_START_Y = 400;
   const BG_HIT_RADIUS = 17;
   const BG_CHAIN_RADIUS = 27;
+  const BG_MAX_DRAG = 90;
+  const BG_LEADERBOARD_KEY = "bowlingGameLeaderboard";
 
   function bgPinPos(p) {
     return { x: BG_LANE_CENTER_X + p.col * BG_COL_GAP, y: BG_PIN_TOP_Y + p.row * BG_ROW_GAP };
@@ -3508,20 +3538,25 @@
   let bgTenthBalls = [];
   let bgStandingPins = new Set();
   let bgGameOver = false;
-  let bgPhase = "idle";          // idle | charging | rolling
-  let bgPower = 0;
-  let bgPowerDir = 1;
-  let bgPowerTimer = null;
+  let bgPhase = "idle";          // idle | aiming | rolling
   let bgInitialized = false;
+  let bgWeight = 14;
+  let bgDragging = false;
+  let bgDragCurrent = null;
 
   window.bowlingEnsureStarted = function () {
     if (bgInitialized) return;
     bgInitialized = true;
+    bowlingBindCanvasEvents();
+    bowlingRenderLeaderboard();
     bowlingStartGame();
   };
 
+  window.bowlingOnWeightChange = function () {
+    bgWeight = Number($("bgWeight").value);
+  };
+
   window.bowlingStartGame = function () {
-    if (bgPowerTimer) clearInterval(bgPowerTimer);
     bgRolls = [];
     bgFrameRolls = Array.from({ length: 10 }, () => []);
     bgFrame = 1;
@@ -3529,15 +3564,27 @@
     bgTenthBalls = [];
     bgGameOver = false;
     bgPhase = "idle";
-    bgPower = 0;
+    bgDragging = false;
     bgStandingPins = new Set(BG_PIN_LAYOUT.map(p => p.num));
-    $("bgRollBtn").disabled = false;
-    $("bgRollBtn").textContent = "🎳 굴리기";
     $("bgPowerBar").style.width = "0%";
     $("bgResultMsg").textContent = "";
     bowlingRenderStatic();
     bowlingRenderUi();
   };
+
+  function populateBowlingPlayerSelect() {
+    const sel = $("bgPlayerSelect");
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = allMembers.map(m =>
+      `<option value="${m.id}">${escapeHtml(memberAnimal(m.id))} ${escapeHtml(m.nickname ? `${m.nickname} (${m.name})` : m.name)}</option>`
+    ).join("");
+    if (prev && allMembers.some(m => m.id === prev)) {
+      sel.value = prev;
+    } else if (myMemberId && allMembers.some(m => m.id === myMemberId)) {
+      sel.value = myMemberId;
+    }
+  }
 
   function bowlingScoreTotal(rolls) {
     let score = 0, i = 0;
@@ -3609,10 +3656,11 @@
   function bowlingRenderStatic() {
     const canvas = $("bowlingCanvas");
     const ctx = canvas.getContext("2d");
-    bowlingDrawLane(ctx, BG_LANE_CENTER_X, BG_START_Y);
+    bowlingDrawLaneBase(ctx);
+    bowlingDrawBallAt(ctx, BG_LANE_CENTER_X, BG_START_Y);
   }
 
-  function bowlingDrawLane(ctx, ballX, ballY) {
+  function bowlingDrawLaneBase(ctx) {
     const w = ctx.canvas.width, h = ctx.canvas.height;
     ctx.clearRect(0, 0, w, h);
     // 레인
@@ -3641,37 +3689,120 @@
         ctx.stroke();
       }
     });
+  }
 
-    // 공
+  function bowlingDrawBallAt(ctx, x, y) {
     ctx.beginPath();
-    ctx.arc(ballX, ballY, BG_BALL_RADIUS, 0, Math.PI * 2);
+    ctx.arc(x, y, BG_BALL_RADIUS, 0, Math.PI * 2);
     ctx.fillStyle = "#2f7d3c";
     ctx.fill();
   }
 
-  window.bowlingHandleRollButton = function () {
-    if (bgGameOver) return;
-    if (bgPhase === "idle") {
-      bgPhase = "charging";
-      bgPower = 0;
-      bgPowerDir = 1;
-      $("bgRollBtn").textContent = "🔒 파워 고정!";
-      bgPowerTimer = setInterval(() => {
-        bgPower += bgPowerDir * 4;
-        if (bgPower >= 100) { bgPower = 100; bgPowerDir = -1; }
-        if (bgPower <= 0) { bgPower = 0; bgPowerDir = 1; }
-        $("bgPowerBar").style.width = bgPower + "%";
-      }, 16);
-    } else if (bgPhase === "charging") {
-      clearInterval(bgPowerTimer);
-      bgPhase = "rolling";
-      $("bgRollBtn").disabled = true;
-      $("bgRollBtn").textContent = "굴리는 중...";
-      bowlingAnimateRoll(bgPower, Number($("bgAim").value));
-    }
-  };
+  function bowlingDrawLane(ctx, ballX, ballY) {
+    bowlingDrawLaneBase(ctx);
+    bowlingDrawBallAt(ctx, ballX, ballY);
+  }
 
-  function bowlingKnockPin(num, fellThisRoll) {
+  function bowlingCanvasPoint(e) {
+    const canvas = $("bowlingCanvas");
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY,
+    };
+  }
+
+  function bowlingDrawAiming() {
+    const canvas = $("bowlingCanvas");
+    const ctx = canvas.getContext("2d");
+    bowlingDrawLaneBase(ctx);
+
+    // 당긴 고무줄
+    ctx.strokeStyle = "rgba(255,255,255,0.6)";
+    ctx.setLineDash([6, 4]);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(BG_LANE_CENTER_X, BG_START_Y);
+    ctx.lineTo(bgDragCurrent.x, bgDragCurrent.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 예상 발사 방향(반대쪽)
+    const dx = BG_LANE_CENTER_X - bgDragCurrent.x;
+    const dy = BG_START_Y - bgDragCurrent.y;
+    ctx.strokeStyle = "#ffd166";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(BG_LANE_CENTER_X, BG_START_Y);
+    ctx.lineTo(BG_LANE_CENTER_X + dx * 1.6, BG_START_Y + dy * 1.6);
+    ctx.stroke();
+
+    bowlingDrawBallAt(ctx, bgDragCurrent.x, bgDragCurrent.y);
+
+    const dist = Math.hypot(dx, dy);
+    const power = Math.min(1, dist / BG_MAX_DRAG);
+    $("bgPowerBar").style.width = Math.round(power * 100) + "%";
+  }
+
+  function bowlingBindCanvasEvents() {
+    const canvas = $("bowlingCanvas");
+
+    canvas.addEventListener("pointerdown", (e) => {
+      if (bgGameOver || bgPhase !== "idle") return;
+      const p = bowlingCanvasPoint(e);
+      const dist = Math.hypot(p.x - BG_LANE_CENTER_X, p.y - BG_START_Y);
+      if (dist > 30) return; // 공 근처를 잡아야 함
+      e.preventDefault();
+      try { canvas.setPointerCapture(e.pointerId); } catch {}
+      bgDragging = true;
+      bgPhase = "aiming";
+      bgDragCurrent = { x: BG_LANE_CENTER_X, y: BG_START_Y };
+      bowlingDrawAiming();
+    });
+
+    canvas.addEventListener("pointermove", (e) => {
+      if (!bgDragging) return;
+      e.preventDefault();
+      const p = bowlingCanvasPoint(e);
+      let dx = p.x - BG_LANE_CENTER_X;
+      let dy = p.y - BG_START_Y;
+      if (dy < 0) dy = 0; // 앞으로는 밀 수 없고 뒤로만 당길 수 있음
+      const dist = Math.hypot(dx, dy);
+      if (dist > BG_MAX_DRAG) {
+        const scale = BG_MAX_DRAG / dist;
+        dx *= scale;
+        dy *= scale;
+      }
+      bgDragCurrent = { x: BG_LANE_CENTER_X + dx, y: BG_START_Y + dy };
+      bowlingDrawAiming();
+    });
+
+    const endDrag = (e) => {
+      if (!bgDragging) return;
+      bgDragging = false;
+      const dx = bgDragCurrent.x - BG_LANE_CENTER_X;
+      const dy = bgDragCurrent.y - BG_START_Y;
+      const dist = Math.hypot(dx, dy);
+      $("bgPowerBar").style.width = "0%";
+
+      if (dist < 12) {
+        // 너무 약하게 당기면 취소
+        bgPhase = "idle";
+        bowlingRenderStatic();
+        return;
+      }
+      const power = Math.min(1, dist / BG_MAX_DRAG);
+      const aimOffset = -dx * 2.4;
+      bgPhase = "rolling";
+      bowlingAnimateRoll(power, aimOffset);
+    };
+    canvas.addEventListener("pointerup", endDrag);
+    canvas.addEventListener("pointercancel", endDrag);
+  }
+
+  function bowlingKnockPin(num, fellThisRoll, chainRadius) {
     if (!bgStandingPins.has(num)) return;
     bgStandingPins.delete(num);
     fellThisRoll.add(num);
@@ -3681,17 +3812,20 @@
       if (!bgStandingPins.has(q.num) || fellThisRoll.has(q.num)) return;
       const qPos = bgPinPos(q);
       const d = Math.hypot(pos.x - qPos.x, pos.y - qPos.y);
-      if (d < BG_CHAIN_RADIUS && Math.random() < 0.5) {
-        bowlingKnockPin(q.num, fellThisRoll);
+      if (d < chainRadius && Math.random() < 0.5) {
+        bowlingKnockPin(q.num, fellThisRoll, chainRadius);
       }
     });
   }
 
-  function bowlingAnimateRoll(power, aim) {
+  function bowlingAnimateRoll(power, aimOffset) {
     const canvas = $("bowlingCanvas");
     const ctx = canvas.getContext("2d");
-    const duration = 1150 - power * 3.5;
-    const curveAmount = Math.random() * 26 - 13;
+    const weightFactor = (bgWeight - 8) / (16 - 8); // 0(가벼움) ~ 1(무거움)
+    const duration = 1300 - power * 500;
+    const curveAmount = (Math.random() * 26 - 13) * (1 - weightFactor * 0.6);
+    const hitRadius = BG_HIT_RADIUS + weightFactor * 6;
+    const chainRadius = BG_CHAIN_RADIUS + weightFactor * 8;
     const fellThisRoll = new Set();
     const startTime = performance.now();
     const checked = new Set();
@@ -3699,14 +3833,14 @@
     function step(now) {
       const t = Math.min(1, (now - startTime) / duration);
       const y = BG_START_Y + (BG_PIN_TOP_Y - BG_START_Y) * t;
-      const x = BG_LANE_CENTER_X + aim * t + curveAmount * Math.sin(t * Math.PI);
+      const x = BG_LANE_CENTER_X + aimOffset * t + curveAmount * Math.sin(t * Math.PI);
 
       BG_PIN_LAYOUT.forEach(p => {
         if (!bgStandingPins.has(p.num) || checked.has(p.num)) return;
         const pos = bgPinPos(p);
-        if (y <= pos.y + 10 && Math.hypot(x - pos.x, y - pos.y) < BG_HIT_RADIUS) {
+        if (y <= pos.y + 10 && Math.hypot(x - pos.x, y - pos.y) < hitRadius) {
           checked.add(p.num);
-          bowlingKnockPin(p.num, fellThisRoll);
+          bowlingKnockPin(p.num, fellThisRoll, chainRadius);
         }
       });
 
@@ -3770,15 +3904,63 @@
 
     if (bgGameOver) {
       msg = `🏁 게임 종료! 최종 점수 ${bowlingScoreTotal(bgRolls)}점`;
+      bowlingSaveScore();
     }
 
     $("bgResultMsg").textContent = msg;
     bgPhase = "idle";
-    $("bgRollBtn").disabled = bgGameOver;
-    $("bgRollBtn").textContent = bgGameOver ? "게임 종료" : "🎳 굴리기";
-    $("bgPowerBar").style.width = "0%";
     bowlingRenderStatic();
     bowlingRenderUi();
+  }
+
+  function bowlingLoadLeaderboard() {
+    try {
+      return JSON.parse(localStorage.getItem(BG_LEADERBOARD_KEY) || "[]");
+    } catch {
+      return [];
+    }
+  }
+
+  function bowlingSaveScore() {
+    const memberId = $("bgPlayerSelect").value;
+    if (!memberId) return;
+    const member = allMembers.find(m => m.id === memberId);
+    if (!member) return;
+    const list = bowlingLoadLeaderboard();
+    list.push({
+      memberId,
+      name: member.name,
+      nickname: member.nickname,
+      score: bowlingScoreTotal(bgRolls),
+      playedAt: new Date().toISOString(),
+    });
+    try {
+      localStorage.setItem(BG_LEADERBOARD_KEY, JSON.stringify(list));
+    } catch {}
+    bowlingRenderLeaderboard();
+  }
+
+  function bowlingRenderLeaderboard() {
+    const tbody = $("bgLeaderboardBody");
+    if (!tbody) return;
+    const list = bowlingLoadLeaderboard();
+    const bestByMember = new Map();
+    list.forEach(e => {
+      const cur = bestByMember.get(e.memberId);
+      if (!cur || e.score > cur.score) bestByMember.set(e.memberId, e);
+    });
+    const ranked = [...bestByMember.values()].sort((a, b) => b.score - a.score);
+    if (!ranked.length) {
+      tbody.innerHTML = `<tr><td colspan="3" class="empty">아직 기록이 없습니다.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = ranked.map((e, i) => `
+      <tr>
+        <td>${["🥇", "🥈", "🥉"][i] || (i + 1) + "위"}</td>
+        <td>${memberDisplay(e.name, e.nickname, e.memberId)}</td>
+        <td><b>${e.score}</b></td>
+      </tr>
+    `).join("");
   }
 
   db.auth.onAuthStateChange(() => refreshAuthUi());
