@@ -784,14 +784,14 @@
         <canvas id="growthCanvas"></canvas>
       </div>
       <div id="growthEmpty" class="empty" style="display:none;">아직 등록된 점수가 없어요.</div>
-      <div class="note" style="margin-top:8px;">연한 선은 게임별 점수, 굵은 선은 최근 5게임 이동평균이에요.</div>
+      <div class="note" style="margin-top:8px;">같은 날 여러 게임을 했으면 그날의 평균 점수 하나로 표시돼요. 연한 선은 일별 평균 점수, 굵은 선은 최근 5일 이동평균이에요.</div>
     </div>
   </div>
 
   <div id="tabCompare" style="display:none;">
     <div class="section">
       <h2>📊 회원 성장 비교</h2>
-      <div class="note" style="margin-bottom:10px;">비교할 회원을 선택하세요 (여러 명 선택 가능). 각자의 게임 순서 기준 최근 5게임 이동평균을 겹쳐서 보여줘요.</div>
+      <div class="note" style="margin-bottom:10px;">비교할 회원을 선택하세요 (여러 명 선택 가능). 하루에 여러 게임을 했으면 그날 평균으로 묶어서, 각자의 활동일 순서 기준 최근 5일 이동평균을 겹쳐서 보여줘요.</div>
       <div id="compareMemberChecks" class="compare-checks"></div>
       <div style="margin-top:16px;position:relative;height:320px;">
         <canvas id="compareCanvas"></canvas>
@@ -2840,6 +2840,21 @@
   // ============================================================
   // 📈 개인 성장 그래프
   // ============================================================
+  // 같은 날 여러 게임을 했으면 그날의 평균 점수 하나로 묶어서 반환
+  function groupScoresByDay(rows) {
+    const byDate = new Map();
+    rows.forEach(r => {
+      if (!byDate.has(r.played_at)) byDate.set(r.played_at, []);
+      byDate.get(r.played_at).push(r.score);
+    });
+    const dates = [...byDate.keys()];
+    const scores = dates.map(d => {
+      const dayScores = byDate.get(d);
+      return +(dayScores.reduce((a, b) => a + b, 0) / dayScores.length).toFixed(1);
+    });
+    return { dates, scores };
+  }
+
   window.renderGrowthChart = function () {
     const sel = $("growthMemberSelect");
     const canvasWrap = $("growthCanvas").parentElement;
@@ -2865,25 +2880,27 @@
     canvasWrap.style.display = "block";
     $("growthEmpty").style.display = "none";
 
-    const scores = rows.map(r => r.score);
-    const labels = rows.map(r => r.played_at);
-    const games = scores.length;
-    const high = Math.max(...scores);
-    const avg = scores.reduce((a, b) => a + b, 0) / games;
+    const allScores = rows.map(r => r.score);
+    const games = allScores.length;
+    const high = Math.max(...allScores);
+    const avg = allScores.reduce((a, b) => a + b, 0) / games;
 
     $("growthGames").textContent = games;
     $("growthHigh").textContent = high;
     $("growthAvg").textContent = avg.toFixed(1);
 
-    // 최근 5게임 이동평균 (성장 흐름을 부드럽게 보여주기 위함)
+    // 하루에 여러 게임을 했으면 그날의 평균으로 점 하나만 찍음
+    const { dates: labels, scores } = groupScoresByDay(rows);
+
+    // 최근 5일 이동평균 (성장 흐름을 부드럽게 보여주기 위함)
     const movingAvg = scores.map((_, i) => {
       const start = Math.max(0, i - 4);
       const slice = scores.slice(start, i + 1);
       return +(slice.reduce((a, b) => a + b, 0) / slice.length).toFixed(1);
     });
 
-    // 게임 수가 적을 때는 점 크기를 키워서 그래프가 잘 보이게 함
-    const sparse = games < 5;
+    // 점 개수가 적을 때는 점 크기를 키워서 그래프가 잘 보이게 함
+    const sparse = scores.length < 5;
 
     // 점수 변동이 잘 보이도록 실제 점수 범위에 맞춰 y축을 확대
     const dataMin = Math.min(...scores);
@@ -2899,7 +2916,7 @@
         labels,
         datasets: [
           {
-            label: "게임 점수",
+            label: "일별 평균 점수",
             data: scores,
             borderColor: "#b9c3b5",
             backgroundColor: "rgba(47,125,60,0.08)",
@@ -2908,7 +2925,7 @@
             tension: 0.2,
           },
           {
-            label: "최근 5게임 평균",
+            label: "최근 5일 평균",
             data: movingAvg,
             borderColor: "#2f7d3c",
             borderWidth: 2.5,
@@ -2971,7 +2988,7 @@
         .filter(r => r.member_id === id)
         .slice()
         .sort((a, b) => `${a.played_at}_${a.created_at}`.localeCompare(`${b.played_at}_${b.created_at}`));
-      const scores = rows.map(r => r.score);
+      const { scores } = groupScoresByDay(rows);
       const movingAvg = scores.map((_, idx) => {
         const start = Math.max(0, idx - 4);
         const slice = scores.slice(start, idx + 1);
@@ -2990,7 +3007,7 @@
     });
 
     const maxLen = Math.max(1, ...datasets.map(d => d.data.length));
-    const labels = Array.from({ length: maxLen }, (_, i) => `${i + 1}게임`);
+    const labels = Array.from({ length: maxLen }, (_, i) => `${i + 1}일차`);
 
     const allValues = datasets.flatMap(d => d.data);
     const dataMin = allValues.length ? Math.min(...allValues) : 0;
