@@ -3526,8 +3526,10 @@
   const BG_BALL_RADIUS = 10;
   const BG_START_Y = 400;
   const BG_HIT_RADIUS = 11;
-  const BG_CHAIN_RADIUS = 21;
-  const BG_CHAIN_PROB = 0.32;
+  const BG_CHAIN_RADIUS = 24;
+  const BG_CHAIN_PROB = 0.65;
+  const BG_CHAIN_MIN_DOT = 0.15;    // 진행 방향과 너무 다른 쪽 핀은 맞지 않도록 하는 최소 정렬도
+  const BG_CHAIN_DIR_X_AMP = 3;     // 좌우로 조준한 정도가 연쇄 방향에 더 크게 반영되도록 증폭
   const BG_CHAIN_DELAY_MIN = 90;
   const BG_CHAIN_DELAY_MAX = 220;
   const BG_FALL_ANIM_MS = 260;
@@ -3874,9 +3876,12 @@
     canvas.addEventListener("pointercancel", endDrag);
   }
 
-  // 핀 하나를 쓰러뜨림. 아주 가까운 핀은 즉시가 아니라 살짝 지연된 뒤 쓰러지도록 예약해서
-  // "한번에 와르르"가 아니라 도미노처럼 순차적으로 넘어지는 느낌을 줌.
-  function bowlingKnockPin(num, fellThisRoll, chainRadius, pendingChain) {
+  // 핀 하나를 쓰러뜨림. 공이(혹은 먼저 쓰러진 핀이) 나아가던 방향(dir)과 비슷한
+  // 방향에 있는 핀만, 그것도 방향이 더 잘 맞을수록 더 높은 확률로 맞음.
+  // 그래야 옆 방향으로 정확히 맞았을 때만 그쪽 핀들이 연쇄로 넘어가면서
+  // 스페어를 노릴 수 있는 "일부만 남는" 배치가 나옴. 바로 쓰러뜨리지 않고
+  // 살짝 지연 예약해서 도미노처럼 순차적으로 넘어지는 느낌도 줌.
+  function bowlingKnockPin(num, fellThisRoll, chainRadius, pendingChain, dir) {
     if (!bgStandingPins.has(num)) return;
     bgStandingPins.delete(num);
     bgFallStart.set(num, performance.now());
@@ -3886,11 +3891,17 @@
     BG_PIN_LAYOUT.forEach(q => {
       if (!bgStandingPins.has(q.num) || fellThisRoll.has(q.num)) return;
       const qPos = bgPinPos(q);
-      const d = Math.hypot(pos.x - qPos.x, pos.y - qPos.y);
-      if (d < chainRadius && Math.random() < BG_CHAIN_PROB) {
+      const vx = qPos.x - pos.x, vy = qPos.y - pos.y;
+      const dist = Math.hypot(vx, vy);
+      if (dist >= chainRadius) return;
+      const ux = vx / dist, uy = vy / dist;
+      const dot = ux * dir.x + uy * dir.y; // 1에 가까울수록 진행 방향과 일치
+      if (dot < BG_CHAIN_MIN_DOT) return;
+      if (Math.random() < BG_CHAIN_PROB * dot) {
         fellThisRoll.add(q.num); // 중복 예약 방지 (실제로 쓰러지는 건 pendingChain 처리 시점)
         pendingChain.push({
           num: q.num,
+          dir: { x: ux, y: uy }, // 다음 연쇄는 "이 핀 -> 다음 핀" 방향으로 이어짐
           fireAt: performance.now() + BG_CHAIN_DELAY_MIN + Math.random() * (BG_CHAIN_DELAY_MAX - BG_CHAIN_DELAY_MIN),
         });
       }
@@ -3909,18 +3920,29 @@
     const pendingChain = [];
     const startTime = performance.now();
     const checked = new Set();
+    let prevX = BG_LANE_CENTER_X;
+    let prevY = BG_START_Y;
 
     function step(now) {
       const t = Math.min(1, (now - startTime) / duration);
       const y = BG_START_Y + (BG_PIN_TOP_Y - BG_START_Y) * t;
       const x = BG_LANE_CENTER_X + aimOffset * t + curveAmount * Math.sin(t * Math.PI);
 
+      // 공이 실제로 나아가는 방향(진행 방향). 좌우 성분을 과장해서
+      // 조준을 왼쪽/오른쪽으로 틀었을 때 그쪽 핀이 더 잘 맞도록 함.
+      const rawDx = (x - prevX) * BG_CHAIN_DIR_X_AMP;
+      const rawDy = y - prevY;
+      const dirLen = Math.hypot(rawDx, rawDy) || 1;
+      const ballDir = { x: rawDx / dirLen, y: rawDy / dirLen };
+      prevX = x;
+      prevY = y;
+
       BG_PIN_LAYOUT.forEach(p => {
         if (!bgStandingPins.has(p.num) || checked.has(p.num)) return;
         const pos = bgPinPos(p);
         if (y <= pos.y + 10 && Math.hypot(x - pos.x, y - pos.y) < hitRadius) {
           checked.add(p.num);
-          bowlingKnockPin(p.num, fellThisRoll, chainRadius, pendingChain);
+          bowlingKnockPin(p.num, fellThisRoll, chainRadius, pendingChain, ballDir);
         }
       });
 
@@ -3928,7 +3950,7 @@
       for (let i = pendingChain.length - 1; i >= 0; i--) {
         if (pendingChain[i].fireAt <= now) {
           const item = pendingChain.splice(i, 1)[0];
-          bowlingKnockPin(item.num, fellThisRoll, chainRadius, pendingChain);
+          bowlingKnockPin(item.num, fellThisRoll, chainRadius, pendingChain, item.dir);
         }
       }
 
