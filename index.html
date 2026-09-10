@@ -622,6 +622,7 @@
       <button class="primary" onclick="addScores()">점수 등록</button>
       <button class="secondary" onclick="logout()">로그아웃</button>
       <button class="secondary" onclick="togglePasswordChangeBox()">비밀번호 변경</button>
+      <button class="secondary" onclick="toggleNicknameChangeBox()">닉네임 변경</button>
       <div class="note">1~3게임 중 실제 진행한 게임만 입력하면 됩니다. 0~300점만 등록됩니다.</div>
 
       <div id="passwordChangeBox" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid #e5e8e3;">
@@ -632,6 +633,18 @@
         </div>
         <button class="primary" onclick="changePassword()">변경하기</button>
         <button class="secondary" onclick="togglePasswordChangeBox()">취소</button>
+      </div>
+
+      <div id="nicknameChangeBox" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid #e5e8e3;">
+        <h3 style="margin:0 0 10px;font-size:15px;">✏️ 닉네임 변경</h3>
+        <div class="form-grid">
+          <input type="text" id="newNickname" placeholder="새 닉네임">
+        </div>
+        <div class="note" style="margin-top:10px;">확인 질문: 데굴데굴하면 떠오르는 캐릭터는?</div>
+        <input type="text" id="nicknameMascotAnswer" placeholder="정답 입력">
+        <button class="primary" onclick="changeNickname()">변경하기</button>
+        <button class="secondary" onclick="toggleNicknameChangeBox()">취소</button>
+        <div class="status" id="nicknameChangeStatus"></div>
       </div>
     </div>
 
@@ -782,6 +795,9 @@
       </div>
       <div style="margin-top:16px;position:relative;height:280px;">
         <canvas id="growthCanvas"></canvas>
+        <div id="growthAngelOverlay" style="display:none;position:absolute;inset:0;background:rgba(245,246,244,0.9);border-radius:10px;align-items:center;justify-content:center;text-align:center;">
+          <span style="font-size:17px;font-weight:800;color:#52584f;">😇 당신은 엔젤 회원입니다</span>
+        </div>
       </div>
       <div id="growthEmpty" class="empty" style="display:none;">아직 등록된 점수가 없어요.</div>
       <div class="note" style="margin-top:8px;">같은 날 여러 게임을 했으면 그날의 평균 점수 하나로 표시돼요. 연한 선은 일별 평균 점수, 굵은 선은 최근 5일 이동평균이에요.</div>
@@ -791,7 +807,7 @@
   <div id="tabCompare" style="display:none;">
     <div class="section">
       <h2>📊 회원 성장 비교</h2>
-      <div class="note" style="margin-bottom:10px;">비교할 회원을 선택하세요 (여러 명 선택 가능). 하루에 여러 게임을 했으면 그날 평균으로 묶어서, 각자의 활동일 순서 기준 최근 5일 이동평균을 겹쳐서 보여줘요.</div>
+      <div class="note" style="margin-bottom:10px;">비교할 회원을 선택하세요 (여러 명 선택 가능). 하루에 여러 게임을 했으면 그날 평균으로 묶어서, 날짜별 최근 5일 이동평균을 겹쳐서 보여줘요. 그래프에 마우스를 올리면 그날 회원들의 평균 점수를 볼 수 있어요.</div>
       <div id="compareMemberChecks" class="compare-checks"></div>
       <div style="margin-top:16px;position:relative;height:320px;">
         <canvas id="compareCanvas"></canvas>
@@ -1897,6 +1913,7 @@
     if (show) {
       $("newPassword").value = "";
       $("newPasswordConfirm").value = "";
+      $("nicknameChangeBox").style.display = "none";
     }
   };
 
@@ -1915,6 +1932,41 @@
     $("newPassword").value = "";
     $("newPasswordConfirm").value = "";
     $("passwordChangeBox").style.display = "none";
+  };
+
+  window.toggleNicknameChangeBox = function () {
+    const box = $("nicknameChangeBox");
+    const show = box.style.display === "none";
+    box.style.display = show ? "block" : "none";
+    if (show) {
+      $("newNickname").value = "";
+      $("nicknameMascotAnswer").value = "";
+      $("nicknameChangeStatus").textContent = "";
+      $("passwordChangeBox").style.display = "none";
+    }
+  };
+
+  window.changeNickname = async function () {
+    const nickname = $("newNickname").value.trim();
+    const mascotAnswer = $("nicknameMascotAnswer").value.trim();
+
+    if (!nickname) return ($("nicknameChangeStatus").textContent = "새 닉네임을 입력하세요.");
+    if (mascotAnswer !== MASCOT_ANSWER) {
+      const msg = "데굴데굴 마스코트를 모르는 당신은 데굴데굴 회원일리가 없습니다.";
+      customAlert(msg);
+      $("nicknameChangeStatus").textContent = msg;
+      return;
+    }
+    if (!myMemberId) return ($("nicknameChangeStatus").textContent = "회원 정보를 찾을 수 없습니다.");
+
+    $("nicknameChangeStatus").textContent = "닉네임을 변경하는 중...";
+    const { error } = await db.from("bowling_members").update({ nickname }).eq("id", myMemberId);
+    if (error) return ($("nicknameChangeStatus").textContent = "닉네임 변경 실패: " + error.message);
+
+    setStatus("닉네임을 변경했습니다.");
+    $("nicknameChangeBox").style.display = "none";
+    await loadMembers();
+    if (allRows.length) renderDashboard(allRows);
   };
 
   async function refreshAuthUi() {
@@ -2860,6 +2912,7 @@
     const canvasWrap = $("growthCanvas").parentElement;
     if (!sel.value) {
       canvasWrap.style.display = "none";
+      $("growthAngelOverlay").style.display = "none";
       $("growthEmpty").style.display = "block";
       return;
     }
@@ -2870,13 +2923,16 @@
       .sort((a, b) => `${a.played_at}_${a.created_at}`.localeCompare(`${b.played_at}_${b.created_at}`));
 
     if (!rows.length) {
-      canvasWrap.style.display = "none";
-      $("growthEmpty").style.display = "block";
+      canvasWrap.style.display = "block";
+      $("growthEmpty").style.display = "none";
+      $("growthAngelOverlay").style.display = "flex";
+      if (growthChart) { growthChart.destroy(); growthChart = null; }
       $("growthGames").textContent = "0";
       $("growthHigh").textContent = "-";
       $("growthAvg").textContent = "-";
       return;
     }
+    $("growthAngelOverlay").style.display = "none";
     canvasWrap.style.display = "block";
     $("growthEmpty").style.display = "none";
 
@@ -2982,34 +3038,41 @@
     canvasWrap.style.display = "block";
     $("compareEmpty").style.display = "none";
 
-    const datasets = ids.map((id, i) => {
+    // 회원마다 활동 날짜가 달라서, 먼저 날짜별 이동평균을 구한 뒤 전체 날짜를 하나로 합쳐 x축으로 씀
+    const memberSeries = ids.map((id, i) => {
       const member = allMembers.find(m => m.id === id);
       const rows = allRows
         .filter(r => r.member_id === id)
         .slice()
         .sort((a, b) => `${a.played_at}_${a.created_at}`.localeCompare(`${b.played_at}_${b.created_at}`));
-      const { scores } = groupScoresByDay(rows);
+      const { dates, scores } = groupScoresByDay(rows);
       const movingAvg = scores.map((_, idx) => {
         const start = Math.max(0, idx - 4);
         const slice = scores.slice(start, idx + 1);
         return +(slice.reduce((a, b) => a + b, 0) / slice.length).toFixed(1);
       });
-      const color = COMPARE_COLORS[i % COMPARE_COLORS.length];
+      const byDate = new Map(dates.map((d, idx) => [d, movingAvg[idx]]));
       return {
         label: member ? (member.nickname || member.name) : "알 수 없음",
-        data: movingAvg,
-        borderColor: color,
-        backgroundColor: color,
-        borderWidth: 2.5,
-        pointRadius: movingAvg.length < 5 ? 3 : 0,
-        tension: 0.25,
+        color: COMPARE_COLORS[i % COMPARE_COLORS.length],
+        byDate,
       };
     });
 
-    const maxLen = Math.max(1, ...datasets.map(d => d.data.length));
-    const labels = Array.from({ length: maxLen }, (_, i) => `${i + 1}일차`);
+    const labels = [...new Set(memberSeries.flatMap(s => [...s.byDate.keys()]))].sort();
 
-    const allValues = datasets.flatMap(d => d.data);
+    const datasets = memberSeries.map(s => ({
+      label: s.label,
+      data: labels.map(d => s.byDate.has(d) ? s.byDate.get(d) : null),
+      borderColor: s.color,
+      backgroundColor: s.color,
+      borderWidth: 2.5,
+      pointRadius: 3,
+      spanGaps: true,
+      tension: 0.25,
+    }));
+
+    const allValues = datasets.flatMap(d => d.data).filter(v => v !== null);
     const dataMin = allValues.length ? Math.min(...allValues) : 0;
     const dataMax = allValues.length ? Math.max(...allValues) : 300;
     const pad = Math.max(10, Math.round((dataMax - dataMin) * 0.2));
@@ -3021,10 +3084,16 @@
       type: "line",
       data: { labels, datasets },
       options: {
+        interaction: { mode: "index", intersect: false },
         responsive: true,
         maintainAspectRatio: false,
         scales: { y: { min: yMin, max: yMax } },
-        plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } } },
+        plugins: {
+          legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+          tooltip: {
+            filter: (item) => item.raw !== null && item.raw !== undefined,
+          },
+        },
       },
     });
   };
