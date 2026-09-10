@@ -478,7 +478,7 @@
     <button class="tab-btn" id="tabBtnOcr" onclick="showTab('ocr')">📷 사진으로 등록</button>
     <button class="tab-btn" id="tabBtnGrowth" onclick="showTab('growth')">📈 성장그래프</button>
     <button class="tab-btn" id="tabBtnCompare" onclick="showTab('compare')">📊 회원 비교</button>
-    <button class="tab-btn" id="tabBtnHandicap" onclick="showTab('handicap')">🎯 핸디캡</button>
+    <button class="tab-btn" id="tabBtnHandicap" onclick="showTab('handicap')">🎳 팀 구성</button>
     <button class="tab-btn" id="tabBtnVenue" onclick="showTab('venue')">📍 모임장소 추천</button>
     <button class="tab-btn" id="tabBtnMeetupLog" onclick="showTab('meetuplog')">🗓 모임 기록</button>
     <button class="tab-btn" id="tabBtnAnnounce" onclick="showTab('announce')">📢 모임 공지</button>
@@ -687,7 +687,7 @@
 
         <div class="section">
           <h2>🙋 참석자 선택</h2>
-          <div class="note" style="margin-bottom:10px;">오늘 참석하는 회원을 클릭해서 선택하세요. (별도로 저장되지 않고, 이 화면에서만 사용돼요)</div>
+          <div class="note" style="margin-bottom:10px;">오늘 참석하는 회원을 클릭해서 선택하세요. (별도로 저장되지 않고, 이 화면에서만 사용돼요) 여기서 고른 참석자로 <b>팀 구성</b> 탭에서 팀을 짤 수 있어요.</div>
           <div id="attendeeArea"><div class="empty">회원 목록을 불러오는 중...</div></div>
 
           <div class="note" style="margin:14px 0 6px;font-weight:700;">🙌 게스트 추가</div>
@@ -698,25 +698,6 @@
           <div id="guestArea" style="margin-top:8px;"></div>
         </div>
 
-        <div class="section">
-          <h2>🎳 레인별 팀 구성</h2>
-          <div class="rank-controls">
-            <label>인원/팀</label>
-            <select id="teamSizeSelect">
-              <option value="auto">자동 (인원에 따라 2~3명)</option>
-              <option value="2">2명씩</option>
-              <option value="3">3명씩</option>
-              <option value="4">4명씩</option>
-            </select>
-            <label>방식</label>
-            <select id="teamModeSelect">
-              <option value="balanced">점수 기반 균형 팀</option>
-              <option value="random">랜덤</option>
-            </select>
-            <button class="primary" onclick="generateTeams()">팀 구성하기</button>
-          </div>
-          <div id="teamArea"><div class="empty">참석자를 선택한 뒤 팀을 구성해보세요.</div></div>
-        </div>
       </div>
 
       <div class="side-col">
@@ -817,6 +798,27 @@
   </div>
 
   <div id="tabHandicap" style="display:none;">
+    <div class="section">
+      <h2>🎳 레인별 팀 구성</h2>
+      <div class="note" style="margin-bottom:10px;"><b>모임장소 추천</b> 탭에서 참석자(와 게스트)를 먼저 선택한 뒤 여기서 팀을 구성하세요.</div>
+      <div class="rank-controls">
+        <label>인원/팀</label>
+        <select id="teamSizeSelect">
+          <option value="auto">자동 (인원에 따라 2~3명)</option>
+          <option value="2">2명씩</option>
+          <option value="3">3명씩</option>
+          <option value="4">4명씩</option>
+        </select>
+        <label>방식</label>
+        <select id="teamModeSelect">
+          <option value="balanced">점수 기반 균형 팀</option>
+          <option value="random">랜덤</option>
+        </select>
+        <button class="primary" onclick="generateTeams()">팀 구성하기</button>
+      </div>
+      <div id="teamArea"><div class="empty">참석자를 선택한 뒤 팀을 구성해보세요.</div></div>
+    </div>
+
     <div class="section">
       <h2>🎯 핸디캡 계산</h2>
       <div class="note" style="margin-bottom:10px;">핸디캡 = (기준점수 − 에버리지) × 가중치 (0보다 작으면 0). 실력 차이를 보정해서 팀 경기나 내기에 활용해보세요.</div>
