@@ -3532,17 +3532,28 @@
   const BG_CHAIN_DIR_X_AMP = 3;     // 좌우로 조준한 정도가 연쇄 방향에 더 크게 반영되도록 증폭
   const BG_CHAIN_DELAY_MIN = 90;
   const BG_CHAIN_DELAY_MAX = 220;
-  const BG_FALL_ANIM_MS = 260;
+  const BG_FALL_ANIM_MS = 420;      // 핀이 맞은 방향으로 튕겨 날아가는 연출 시간
   const BG_MAX_DRAG = 90;
   const BG_LEADERBOARD_KEY = "bowlingGameLeaderboard";
+  const BG_FAR_SCALE = 0.58;        // 레인 안쪽(먼 곳)일수록 작게 그려서 원근감을 줌
+  const BG_IMPACT_ANIM_MS = 260;
+  const BG_KICK_ANIM_MS = 140;
 
   function bgPinPos(p) {
     return { x: BG_LANE_CENTER_X + p.col * BG_COL_GAP, y: BG_PIN_TOP_Y + p.row * BG_ROW_GAP };
   }
 
+  // 레인 안쪽(핀 쪽)일수록 화면에서 작고 중앙에 가깝게, 앞쪽(플레이어 쪽)일수록 크고 넓게 투영
+  function bgPerspective(worldX, y) {
+    const depthT = Math.max(0, Math.min(1, (y - BG_PIN_TOP_Y) / (BG_START_Y - BG_PIN_TOP_Y)));
+    const scale = BG_FAR_SCALE + (1 - BG_FAR_SCALE) * depthT;
+    return { x: BG_LANE_CENTER_X + (worldX - BG_LANE_CENTER_X) * scale, y, scale };
+  }
+
   function bowlingResetStandingPins() {
     bgStandingPins = new Set(BG_PIN_LAYOUT.map(p => p.num));
     bgFallStart = new Map();
+    bgImpacts = [];
   }
 
   let bgRolls = [];              // 프레임 진행에 쓰는 flat 롤 배열 (스트라이크=10 등)
@@ -3557,7 +3568,9 @@
   let bgWeight = 14;
   let bgDragging = false;
   let bgDragCurrent = null;
-  let bgFallStart = new Map();   // 핀 번호 -> 쓰러지기 시작한 시각 (연출용)
+  let bgFallStart = new Map();   // 핀 번호 -> { time, dir } 쓰러지기 시작한 시각/방향 (연출용)
+  let bgImpacts = [];            // 충돌 지점 반짝임 연출용 [{x,y,time}]
+  let bgBallKick = null;         // 공이 핀에 맞았을 때 잠깐 튕기는 연출용 { time, x, y }
 
   window.bowlingEnsureStarted = function () {
     if (bgInitialized) return;
@@ -3580,6 +3593,7 @@
     bgGameOver = false;
     bgPhase = "idle";
     bgDragging = false;
+    bgBallKick = null;
     bowlingResetStandingPins();
     $("bgPowerBar").style.width = "0%";
     $("bgResultMsg").textContent = "";
@@ -3708,32 +3722,78 @@
   function bowlingDrawLaneBase(ctx) {
     const w = ctx.canvas.width, h = ctx.canvas.height;
     ctx.clearRect(0, 0, w, h);
-    // 레인
-    ctx.fillStyle = "#3b2a1a";
+    ctx.fillStyle = "#241a12";
     ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = "#caa06a";
-    ctx.fillRect(30, 20, w - 60, h - 40);
-    // 파울선
-    ctx.strokeStyle = "rgba(0,0,0,0.25)";
+
+    // 레인을 사다리꼴로 그려서 안쪽(핀 방향)으로 멀어지는 원근감을 줌
+    const nearL = bgPerspective(30, BG_START_Y + 20).x;
+    const nearR = bgPerspective(w - 30, BG_START_Y + 20).x;
+    const farL = bgPerspective(30, BG_PIN_TOP_Y - 25).x;
+    const farR = bgPerspective(w - 30, BG_PIN_TOP_Y - 25).x;
+    const laneGrad = ctx.createLinearGradient(0, BG_PIN_TOP_Y - 25, 0, BG_START_Y + 20);
+    laneGrad.addColorStop(0, "#9c7a4c");
+    laneGrad.addColorStop(1, "#caa06a");
+    ctx.fillStyle = laneGrad;
     ctx.beginPath();
-    ctx.moveTo(30, BG_START_Y + 10);
-    ctx.lineTo(w - 30, BG_START_Y + 10);
+    ctx.moveTo(nearL, BG_START_Y + 20);
+    ctx.lineTo(nearR, BG_START_Y + 20);
+    ctx.lineTo(farR, BG_PIN_TOP_Y - 25);
+    ctx.lineTo(farL, BG_PIN_TOP_Y - 25);
+    ctx.closePath();
+    ctx.fill();
+
+    // 레인 중앙 광택 라인 (깊이감 보조)
+    ctx.strokeStyle = "rgba(255,255,255,0.08)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(BG_LANE_CENTER_X, BG_START_Y + 20);
+    ctx.lineTo(BG_LANE_CENTER_X, BG_PIN_TOP_Y - 25);
     ctx.stroke();
 
-    // 핀
+    // 파울선
+    ctx.strokeStyle = "rgba(0,0,0,0.3)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(nearL, BG_START_Y + 10);
+    ctx.lineTo(nearR, BG_START_Y + 10);
+    ctx.stroke();
+
+    // 충돌 지점 반짝임
     const now = performance.now();
-    BG_PIN_LAYOUT.forEach(p => {
+    for (let i = bgImpacts.length - 1; i >= 0; i--) {
+      const imp = bgImpacts[i];
+      const age = now - imp.time;
+      if (age > BG_IMPACT_ANIM_MS) { bgImpacts.splice(i, 1); continue; }
+      const t = age / BG_IMPACT_ANIM_MS;
+      const proj = bgPerspective(imp.x, imp.y);
+      ctx.beginPath();
+      ctx.arc(proj.x, proj.y, (4 + t * 14) * proj.scale, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255,235,180,${1 - t})`;
+      ctx.lineWidth = 2 * proj.scale;
+      ctx.stroke();
+    }
+
+    // 핀 (먼 것부터 그려야 가까운 핀이 위로 겹쳐 보임)
+    // 먼 핀(row가 작음)부터 그려야 가까운 핀이 앞에 겹쳐 보임
+    [...BG_PIN_LAYOUT].sort((a, b) => a.row - b.row).forEach(p => {
       const { x, y } = bgPinPos(p);
+      const proj = bgPerspective(x, y);
       const standing = bgStandingPins.has(p.num);
-      const fellAt = bgFallStart.get(p.num);
+      const fall = bgFallStart.get(p.num);
       if (standing) {
-        bowlingDrawPinShape(ctx, x, y, 1, 0);
-      } else if (fellAt !== undefined && now - fellAt < BG_FALL_ANIM_MS) {
-        // 쓰러지는 중: 눕는 각도와 투명도를 서서히 변화
-        const t = (now - fellAt) / BG_FALL_ANIM_MS;
-        bowlingDrawPinShape(ctx, x, y, 1 - t * 0.4, t * (Math.PI / 2.1));
+        bowlingDrawPinShape(ctx, proj.x, proj.y, proj.scale, 0);
+      } else if (fall !== undefined && now - fall.time < BG_FALL_ANIM_MS) {
+        // 맞은 방향으로 튕겨 날아가면서 회전하고 옅어지는 연출
+        const t = (now - fall.time) / BG_FALL_ANIM_MS;
+        const flyX = x + fall.dir.x * 30 * t;
+        const flyY = y + fall.dir.y * 30 * t;
+        const flyProj = bgPerspective(flyX, flyY);
+        ctx.save();
+        ctx.globalAlpha = 1 - t;
+        bowlingDrawPinShape(ctx, flyProj.x, flyProj.y, flyProj.scale * (1 - t * 0.35), t * Math.PI * 1.6);
+        ctx.restore();
       }
-      // 완전히 쓰러진 핀은 그리지 않음 (레인 위에서 치워진 것으로 처리)
+      // 완전히 쓰러진 핀은 그리지 않음 (레인 밖으로 치워진 것으로 처리)
     });
   }
 
@@ -3742,6 +3802,12 @@
     ctx.translate(x, y);
     if (rotation) ctx.rotate(rotation);
     ctx.scale(scale, scale);
+    // 살짝 그림자를 깔아 입체감을 줌
+    ctx.beginPath();
+    ctx.ellipse(0, 9.5, 4.4, 1.6, 0, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(0,0,0,0.28)";
+    ctx.fill();
+
     ctx.beginPath();
     ctx.moveTo(-3.2, 9);
     ctx.quadraticCurveTo(-6.5, 3, -2.6, -2.5);
@@ -3750,9 +3816,13 @@
     ctx.quadraticCurveTo(4.5, -6, 2.6, -2.5);
     ctx.quadraticCurveTo(6.5, 3, 3.2, 9);
     ctx.closePath();
-    ctx.fillStyle = "#f5f3ee";
+    const pinGrad = ctx.createLinearGradient(-6, 0, 6, 0);
+    pinGrad.addColorStop(0, "#d8d3c8");
+    pinGrad.addColorStop(0.45, "#fbfaf7");
+    pinGrad.addColorStop(1, "#c9c2b3");
+    ctx.fillStyle = pinGrad;
     ctx.fill();
-    ctx.strokeStyle = "#c9c2b3";
+    ctx.strokeStyle = "#b9b2a2";
     ctx.lineWidth = 1;
     ctx.stroke();
     // 빨간 띠 두 줄
@@ -3762,12 +3832,34 @@
     ctx.restore();
   }
 
-  function bowlingDrawBallAt(ctx, x, y) {
+  function bowlingDrawBallAt(ctx, worldX, worldY) {
+    const now = performance.now();
+    let kx = 0, ky = 0;
+    if (bgBallKick) {
+      const age = now - bgBallKick.time;
+      if (age < BG_KICK_ANIM_MS) {
+        const decay = 1 - age / BG_KICK_ANIM_MS;
+        kx = bgBallKick.x * decay;
+        ky = bgBallKick.y * decay;
+      } else {
+        bgBallKick = null;
+      }
+    }
+    const proj = bgPerspective(worldX + kx, worldY + ky);
+    const r = BG_BALL_RADIUS * proj.scale;
+
+    // 바닥 그림자 (입체감)
     ctx.beginPath();
-    ctx.arc(x, y, BG_BALL_RADIUS, 0, Math.PI * 2);
-    const grad = ctx.createRadialGradient(x - 3, y - 3, 1, x, y, BG_BALL_RADIUS);
-    grad.addColorStop(0, "#4caf5e");
-    grad.addColorStop(1, "#1f5c29");
+    ctx.ellipse(proj.x, proj.y + r * 0.75, r * 0.9, r * 0.32, 0, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(proj.x, proj.y, r, 0, Math.PI * 2);
+    const grad = ctx.createRadialGradient(proj.x - r * 0.35, proj.y - r * 0.35, r * 0.15, proj.x, proj.y, r);
+    grad.addColorStop(0, "#6fce7e");
+    grad.addColorStop(0.55, "#3f9a4f");
+    grad.addColorStop(1, "#184a20");
     ctx.fillStyle = grad;
     ctx.fill();
   }
@@ -3884,10 +3976,11 @@
   function bowlingKnockPin(num, fellThisRoll, chainRadius, pendingChain, dir) {
     if (!bgStandingPins.has(num)) return;
     bgStandingPins.delete(num);
-    bgFallStart.set(num, performance.now());
-    fellThisRoll.add(num);
     const p = BG_PIN_LAYOUT.find(q => q.num === num);
     const pos = bgPinPos(p);
+    bgFallStart.set(num, { time: performance.now(), dir });
+    bgImpacts.push({ x: pos.x, y: pos.y, time: performance.now() });
+    fellThisRoll.add(num);
     BG_PIN_LAYOUT.forEach(q => {
       if (!bgStandingPins.has(q.num) || fellThisRoll.has(q.num)) return;
       const qPos = bgPinPos(q);
@@ -3943,6 +4036,7 @@
         if (y <= pos.y + 10 && Math.hypot(x - pos.x, y - pos.y) < hitRadius) {
           checked.add(p.num);
           bowlingKnockPin(p.num, fellThisRoll, chainRadius, pendingChain, ballDir);
+          bgBallKick = { time: now, x: (Math.random() - 0.5) * 10, y: (Math.random() - 0.5) * 6 };
         }
       });
 
@@ -3958,8 +4052,8 @@
 
       let anyRecentFall = false;
       fellThisRoll.forEach(num => {
-        const ft = bgFallStart.get(num);
-        if (ft !== undefined && now - ft < BG_FALL_ANIM_MS) anyRecentFall = true;
+        const fall = bgFallStart.get(num);
+        if (fall !== undefined && now - fall.time < BG_FALL_ANIM_MS) anyRecentFall = true;
       });
 
       if (t < 1 || pendingChain.length > 0 || anyRecentFall) {
