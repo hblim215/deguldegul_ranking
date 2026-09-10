@@ -941,10 +941,29 @@
     setSignupStatus("");
   }
 
-  function memberDisplay(name, nickname) {
+  // 에버리지 1위부터 먹이사슬 최상위 동물을 배정 (점수가 높을수록 상위 포식자)
+  const ANIMAL_CHAIN = ["🦁", "🐯", "🐆", "🐻", "🐺", "🦅", "🐊", "🦊", "🐗", "🦌", "🐰", "🐿️", "🦔", "🐭", "🐸", "🐛", "🐜", "🦗", "🐌", "🦠"];
+  const NO_RECORD_ANIMAL = "🥚";
+  let memberAnimalMap = new Map();
+
+  function computeMemberAnimals(rows) {
+    const stats = computeStats(rows); // 에버리지 내림차순 정렬됨
+    memberAnimalMap = new Map();
+    stats.forEach((s, i) => {
+      memberAnimalMap.set(s.memberId, ANIMAL_CHAIN[i % ANIMAL_CHAIN.length]);
+    });
+  }
+
+  function memberAnimal(memberId) {
+    if (!memberId) return "";
+    return memberAnimalMap.get(memberId) || NO_RECORD_ANIMAL;
+  }
+
+  function memberDisplay(name, nickname, memberId) {
     const primary = nickname || name || "알 수 없음";
     const secondary = (nickname && name && nickname !== name) ? name : null;
-    return `<span class="nickname">${escapeHtml(primary)}</span>` +
+    const animal = memberId ? memberAnimal(memberId) + " " : "";
+    return `${animal}<span class="nickname">${escapeHtml(primary)}</span>` +
       (secondary ? `<span class="realname">${escapeHtml(secondary)}</span>` : "");
   }
 
@@ -1078,16 +1097,19 @@
       $("memberSelect").appendChild(option);
     }
 
-    const growthSel = $("growthMemberSelect");
-    const prevGrowth = growthSel.value;
-    growthSel.innerHTML = allMembers.map(m =>
-      `<option value="${m.id}">${escapeHtml(m.nickname ? `${m.nickname} (${m.name})` : m.name)}</option>`
-    ).join("");
-    if (prevGrowth && allMembers.some(m => m.id === prevGrowth)) growthSel.value = prevGrowth;
-
+    populateGrowthSelect();
     populateCompareChecks();
     updateScoreMemberUi();
     renderVenueMap();
+  }
+
+  function populateGrowthSelect() {
+    const growthSel = $("growthMemberSelect");
+    const prevGrowth = growthSel.value;
+    growthSel.innerHTML = allMembers.map(m =>
+      `<option value="${m.id}">${escapeHtml(memberAnimal(m.id))} ${escapeHtml(m.nickname ? `${m.nickname} (${m.name})` : m.name)}</option>`
+    ).join("");
+    if (prevGrowth && allMembers.some(m => m.id === prevGrowth)) growthSel.value = prevGrowth;
   }
 
   // 관리자가 아니면 본인 기록만 등록할 수 있도록 회원 선택을 숨기고 고정함
@@ -1560,7 +1582,7 @@
     stats.forEach((s, i) => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td class="rank">${["🥇","🥈","🥉"][i] || (i+1)+"위"} ${memberDisplay(s.name, s.nickname)}</td>
+        <td class="rank">${["🥇","🥈","🥉"][i] || (i+1)+"위"} ${memberDisplay(s.name, s.nickname, s.memberId)}</td>
         <td>${s.games}</td>
         <td>${s.high}</td>
         <td><b>${s.avg.toFixed(1)}</b></td>
@@ -1650,11 +1672,11 @@
     const targetStats = computeStats(targetRows);
 
     $("monthAvgLeader").innerHTML =
-      `${memberDisplay(targetStats[0].name, targetStats[0].nickname)}<div class="sub">AVG ${targetStats[0].avg.toFixed(1)}</div>`;
+      `${memberDisplay(targetStats[0].name, targetStats[0].nickname, targetStats[0].memberId)}<div class="sub">AVG ${targetStats[0].avg.toFixed(1)}</div>`;
 
     const gamesLeader = [...targetStats].sort((a, b) => b.games - a.games)[0];
     $("monthGamesLeader").innerHTML =
-      `${memberDisplay(gamesLeader.name, gamesLeader.nickname)}<div class="sub">${gamesLeader.games}게임</div>`;
+      `${memberDisplay(gamesLeader.name, gamesLeader.nickname, gamesLeader.memberId)}<div class="sub">${gamesLeader.games}게임</div>`;
 
     if (!prevMonthRows.length) {
       $("monthImproveLeader").innerHTML = `<span style="font-size:13px;color:#8a908a;">비교할 이전 달 기록 없음</span>`;
@@ -1671,7 +1693,7 @@
       if (prevAvg <= 0) continue;
       const rate = ((s.avg - prevAvg) / prevAvg) * 100;
       if (!best || rate > best.rate) {
-        best = { name: s.name, nickname: s.nickname, rate };
+        best = { name: s.name, nickname: s.nickname, memberId: s.memberId, rate };
       }
     }
 
@@ -1680,7 +1702,7 @@
     } else {
       const sign = best.rate >= 0 ? "+" : "";
       $("monthImproveLeader").innerHTML =
-        `${memberDisplay(best.name, best.nickname)}<div class="sub">${sign}${best.rate.toFixed(1)}%</div>`;
+        `${memberDisplay(best.name, best.nickname, best.memberId)}<div class="sub">${sign}${best.rate.toFixed(1)}%</div>`;
     }
   };
 
@@ -1703,11 +1725,11 @@
     const stats = computeStats(rows);
 
     $("monthAvgLeader").innerHTML =
-      `${memberDisplay(stats[0].name, stats[0].nickname)}<div class="sub">AVG ${stats[0].avg.toFixed(1)}</div>`;
+      `${memberDisplay(stats[0].name, stats[0].nickname, stats[0].memberId)}<div class="sub">AVG ${stats[0].avg.toFixed(1)}</div>`;
 
     const gamesLeader = [...stats].sort((a, b) => b.games - a.games)[0];
     $("monthGamesLeader").innerHTML =
-      `${memberDisplay(gamesLeader.name, gamesLeader.nickname)}<div class="sub">${gamesLeader.games}게임</div>`;
+      `${memberDisplay(gamesLeader.name, gamesLeader.nickname, gamesLeader.memberId)}<div class="sub">${gamesLeader.games}게임</div>`;
 
     // 회원별로 월별 그룹화 → 가장 이른 달과 가장 최근 달의 평균을 비교
     const byMember = new Map();
@@ -1717,6 +1739,7 @@
       if (!month) return;
       if (!byMember.has(key)) {
         byMember.set(key, {
+          memberId: key,
           name: r.bowling_members?.name || "알 수 없음",
           nickname: r.bowling_members?.nickname || "",
           months: new Map(),
@@ -1738,7 +1761,7 @@
       if (firstAvg <= 0) return;
       const rate = ((lastAvg - firstAvg) / firstAvg) * 100;
       if (!best || rate > best.rate) {
-        best = { name: entry.name, nickname: entry.nickname, rate };
+        best = { name: entry.name, nickname: entry.nickname, memberId: entry.memberId, rate };
       }
     });
 
@@ -1747,7 +1770,7 @@
     } else {
       const sign = best.rate >= 0 ? "+" : "";
       $("monthImproveLeader").innerHTML =
-        `${memberDisplay(best.name, best.nickname)}<div class="sub">${sign}${best.rate.toFixed(1)}%</div>`;
+        `${memberDisplay(best.name, best.nickname, best.memberId)}<div class="sub">${sign}${best.rate.toFixed(1)}%</div>`;
     }
   }
 
@@ -1775,7 +1798,7 @@
       const nickname = r.bowling_members?.nickname || "";
       const canDeleteThis = isAdminUser || (myMemberId && r.member_id === myMemberId);
       tr.innerHTML = `
-        <td>${escapeHtml(r.played_at)} · ${memberDisplay(name, nickname)}</td>
+        <td>${escapeHtml(r.played_at)} · ${memberDisplay(name, nickname, r.member_id)}</td>
         <td><b>${r.score}</b></td>
         ${canDeleteAny ? `<td>${canDeleteThis ? `<button class="danger" data-id="${r.id}">삭제</button>` : ""}</td>` : ""}
       `;
@@ -1847,6 +1870,11 @@
 
   function renderDashboard(rows) {
     $("totalGames").textContent = rows.length.toLocaleString();
+    computeMemberAnimals(rows);
+    if (allMembers.length) {
+      populateGrowthSelect();
+      populateCompareChecks();
+    }
 
     if (!rows.length) {
       $("clubHigh").textContent = "-";
@@ -1863,14 +1891,14 @@
     const high = Math.max(...rows.map(r => r.score));
     const highHolders = [...new Set(
       rows.filter(r => r.score === high)
-        .map(r => memberDisplay(r.bowling_members?.name, r.bowling_members?.nickname))
+        .map(r => memberDisplay(r.bowling_members?.name, r.bowling_members?.nickname, r.member_id))
     )];
     $("clubHigh").innerHTML =
       `${high} <span style="font-size:14px;font-weight:700;">${highHolders.join(", ")}</span>`;
 
     const overallStats = computeStats(rows);
     $("avgLeader").innerHTML =
-      `${memberDisplay(overallStats[0].name, overallStats[0].nickname)} <span style="font-size:14px;font-weight:700;">${overallStats[0].avg.toFixed(1)}</span>`;
+      `${memberDisplay(overallStats[0].name, overallStats[0].nickname, overallStats[0].memberId)} <span style="font-size:14px;font-weight:700;">${overallStats[0].avg.toFixed(1)}</span>`;
 
     populateMonthFilter(rows);
     renderRankingTable(rows);
@@ -2059,7 +2087,7 @@
       });
       item.innerHTML = `
         <div class="meta">
-          <span>${memberDisplay(name, nickname)} · ${time}</span>
+          <span>${memberDisplay(name, nickname, c.member_id)} · ${time}</span>
           ${canDelete ? `<button class="danger" data-id="${c.id}">삭제</button>` : ""}
         </div>
         <div class="content">${escapeHtml(c.content)}</div>
@@ -2303,7 +2331,7 @@
       const checked = selectedAttendeeIds.has(m.id);
       const chip = document.createElement("div");
       chip.className = "attendee-chip" + (checked ? " checked" : "");
-      chip.innerHTML = memberDisplay(m.name, m.nickname) + (m.has_car ? " 🚗" : "");
+      chip.innerHTML = memberDisplay(m.name, m.nickname, m.id) + (m.has_car ? " 🚗" : "");
       chip.addEventListener("click", () => toggleAttendeeSelection(m.id));
       list.appendChild(chip);
     });
@@ -2529,7 +2557,7 @@
     const cards = teams.map((t, i) => {
       const avg = t.members.length ? t.total / t.members.length : 0;
       const names = t.members
-        .map(p => (p.isGuest ? "🙌 " : "") + memberDisplay(p.name, p.nickname) + (p.hasRecord ? "" : ` <span class="sub">(기록없음)</span>`))
+        .map(p => (p.isGuest ? "🙌 " : "") + memberDisplay(p.name, p.nickname, p.isGuest ? null : p.id) + (p.hasRecord ? "" : ` <span class="sub">(기록없음)</span>`))
         .join(", ");
       return `
         <div class="venue-card">
@@ -3011,7 +3039,7 @@
     if (!container) return;
     compareSelectedIds = new Set([...compareSelectedIds].filter(id => allMembers.some(m => m.id === id)));
     container.innerHTML = allMembers.map(m => {
-      const label = m.nickname ? `${m.nickname} (${m.name})` : m.name;
+      const label = `${memberAnimal(m.id)} ${m.nickname ? `${m.nickname} (${m.name})` : m.name}`;
       const checked = compareSelectedIds.has(m.id) ? "checked" : "";
       return `<label><input type="checkbox" value="${m.id}" onchange="onCompareCheckChange(this)" ${checked}>${escapeHtml(label)}</label>`;
     }).join("");
@@ -3053,7 +3081,7 @@
       });
       const byDate = new Map(dates.map((d, idx) => [d, movingAvg[idx]]));
       return {
-        label: member ? (member.nickname || member.name) : "알 수 없음",
+        label: member ? `${memberAnimal(id)} ${member.nickname || member.name}` : "알 수 없음",
         color: COMPARE_COLORS[i % COMPARE_COLORS.length],
         byDate,
       };
@@ -3117,7 +3145,7 @@
       const hc = Math.max(0, Math.round((baseScore - s.avg) * weight));
       const applied = (s.avg + hc).toFixed(1);
       return `<tr>
-        <td>${memberDisplay(s.name, s.nickname)}</td>
+        <td>${memberDisplay(s.name, s.nickname, s.memberId)}</td>
         <td>${s.games}</td>
         <td>${s.avg.toFixed(1)}</td>
         <td>${hc}</td>
@@ -3187,7 +3215,7 @@
       const checked = meetupSelectedIds.has(m.id);
       const chip = document.createElement("div");
       chip.className = "attendee-chip" + (checked ? " checked" : "");
-      chip.innerHTML = memberDisplay(m.name, m.nickname);
+      chip.innerHTML = memberDisplay(m.name, m.nickname, m.id);
       chip.addEventListener("click", () => {
         if (meetupSelectedIds.has(m.id)) meetupSelectedIds.delete(m.id);
         else meetupSelectedIds.add(m.id);
@@ -3300,7 +3328,7 @@
       const checked = announceSelectedIds.has(m.id);
       const chip = document.createElement("div");
       chip.className = "attendee-chip" + (checked ? " checked" : "");
-      chip.innerHTML = memberDisplay(m.name, m.nickname) + (m.has_car ? " 🚗" : "");
+      chip.innerHTML = memberDisplay(m.name, m.nickname, m.id) + (m.has_car ? " 🚗" : "");
       chip.addEventListener("click", () => {
         if (announceSelectedIds.has(m.id)) announceSelectedIds.delete(m.id);
         else announceSelectedIds.add(m.id);
