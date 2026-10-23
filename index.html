@@ -513,7 +513,28 @@
         </div>
         <button class="primary" onclick="login()">로그인</button>
         <button class="secondary" onclick="showSignup()">회원가입</button>
+        <button class="secondary" onclick="showForgotPassword()">비밀번호 찾기</button>
         <div class="status" id="gateStatus"></div>
+      </div>
+
+      <div id="forgotBox" style="display:none;">
+        <h3 style="margin:0 0 10px;font-size:16px;">비밀번호 찾기</h3>
+        <div class="note" style="margin-bottom:10px;">가입할 때 쓴 이메일을 입력하면 비밀번호 재설정 링크를 보내드려요. 메일의 링크를 눌러 새 비밀번호를 정하면 됩니다.</div>
+        <input type="email" id="forgotEmail" placeholder="가입한 이메일">
+        <button class="primary" onclick="sendPasswordReset()">재설정 메일 보내기</button>
+        <button class="secondary" onclick="hideForgotPassword()">로그인으로 돌아가기</button>
+        <div class="status" id="forgotStatus"></div>
+      </div>
+
+      <div id="resetBox" style="display:none;">
+        <h3 style="margin:0 0 10px;font-size:16px;">🔒 새 비밀번호 설정</h3>
+        <div class="note" style="margin-bottom:10px;">앞으로 로그인할 때 쓸 새 비밀번호를 입력하세요.</div>
+        <div class="form-grid">
+          <input type="password" id="resetPassword" placeholder="새 비밀번호 (6자 이상)">
+          <input type="password" id="resetPasswordConfirm" placeholder="새 비밀번호 확인">
+        </div>
+        <button class="primary" onclick="completePasswordReset()">비밀번호 변경</button>
+        <div class="status" id="resetStatus"></div>
       </div>
 
       <div id="signupBox" style="display:none;">
@@ -1017,6 +1038,12 @@
   // -> 같은 iframe URL을 여는 다른 사람에게 이전 로그인 상태가 남아 보이는 문제를 방지.
   // (직접 사이트 주소로 접속했을 때는 평소처럼 로그인 상태가 유지됨)
   const isEmbedded = window.self !== window.top;
+
+  // 비밀번호 재설정 메일의 링크로 들어온 경우 (#...type=recovery).
+  // Supabase가 주소의 토큰을 읽고 지우기 전에 미리 확인해둠.
+  const urlHash = new URLSearchParams(location.hash.slice(1));
+  let passwordRecoveryMode = urlHash.get("type") === "recovery";
+  const recoveryLinkError = urlHash.get("error_code") ? urlHash.get("error_description") || urlHash.get("error_code") : "";
 
   const db = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     auth: {
@@ -2059,6 +2086,51 @@
     setGateStatus("로그아웃했습니다.");
   };
 
+  window.showForgotPassword = function () {
+    $("loginBox").style.display = "none";
+    $("forgotBox").style.display = "block";
+    $("forgotEmail").value = $("email").value.trim();
+    $("forgotStatus").textContent = "";
+  };
+
+  window.hideForgotPassword = function () {
+    $("forgotBox").style.display = "none";
+    $("loginBox").style.display = "block";
+  };
+
+  window.sendPasswordReset = async function () {
+    const email = $("forgotEmail").value.trim();
+    if (!email) return ($("forgotStatus").textContent = "가입한 이메일을 입력하세요.");
+
+    $("forgotStatus").textContent = "재설정 메일을 보내는 중...";
+    // 메일 링크는 iframe이 아닌 새 창에서 열리므로, 이 페이지의 실제 주소로 돌아오게 함
+    const { error } = await db.auth.resetPasswordForEmail(email, {
+      redirectTo: location.origin + location.pathname,
+    });
+    if (error) return ($("forgotStatus").textContent = "메일 발송 실패: " + error.message);
+
+    $("forgotStatus").textContent = "재설정 메일을 보냈어요. 메일함(스팸함 포함)을 확인해주세요.";
+  };
+
+  window.completePasswordReset = async function () {
+    const pw = $("resetPassword").value;
+    const pwConfirm = $("resetPasswordConfirm").value;
+
+    if (!pw || pw.length < 6) return ($("resetStatus").textContent = "비밀번호는 6자 이상이어야 합니다.");
+    if (pw !== pwConfirm) return ($("resetStatus").textContent = "새 비밀번호가 서로 일치하지 않습니다.");
+
+    $("resetStatus").textContent = "비밀번호를 변경하는 중...";
+    const { error } = await db.auth.updateUser({ password: pw });
+    if (error) return ($("resetStatus").textContent = "비밀번호 변경 실패: " + error.message);
+
+    passwordRecoveryMode = false;
+    $("resetPassword").value = "";
+    $("resetPasswordConfirm").value = "";
+    $("resetStatus").textContent = "";
+    await refreshAuthUi();
+    customAlert("비밀번호를 변경했어요. 다음부터는 새 비밀번호로 로그인하세요.");
+  };
+
   window.togglePasswordChangeBox = function () {
     const box = $("passwordChangeBox");
     const show = box.style.display === "none";
@@ -2124,10 +2196,24 @@
 
   async function refreshAuthUi() {
     const { data } = await db.auth.getSession();
+    // 재설정 링크로 들어온 상태면 새 비밀번호를 정할 때까지 기록실을 열지 않음
+    if (passwordRecoveryMode && data.session) {
+      $("authGate").style.display = "block";
+      $("appMain").style.display = "none";
+      $("loginBox").style.display = "none";
+      $("signupBox").style.display = "none";
+      $("forgotBox").style.display = "none";
+      $("resetBox").style.display = "block";
+      return;
+    }
+    passwordRecoveryMode = false;
+
     const loggedIn = !!data.session;
     $("authGate").style.display = loggedIn ? "none" : "block";
     $("appMain").style.display = loggedIn ? "block" : "none";
     $("signupBox").style.display = "none";
+    $("forgotBox").style.display = "none";
+    $("resetBox").style.display = "none";
     $("loginBox").style.display = loggedIn ? "none" : "block";
     $("scoreBox").style.display = loggedIn ? "block" : "none";
     $("passwordChangeBox").style.display = "none";
@@ -4275,12 +4361,19 @@
     bowlingRenderLeaderboardRows(bowlingBestPerMember(bowlingLoadLocalLeaderboard()));
   }
 
-  db.auth.onAuthStateChange(() => refreshAuthUi());
+  db.auth.onAuthStateChange((event) => {
+    if (event === "PASSWORD_RECOVERY") passwordRecoveryMode = true;
+    refreshAuthUi();
+  });
 
   populateDongSelects();
 
   await loadMembers();
   await refreshAuthUi();
+  if (recoveryLinkError) {
+    setGateStatus("재설정 링크가 만료되었거나 이미 사용되었어요. '비밀번호 찾기'로 메일을 다시 받아주세요.");
+    history.replaceState(null, "", location.pathname + location.search);
+  }
   await loadScores();
   await loadComments();
   await loadVenues();
